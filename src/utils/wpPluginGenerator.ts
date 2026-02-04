@@ -1163,6 +1163,7 @@ export function generateFormJS(form: Form): string {
             this.form.on('change input', 'input, textarea, select', function() {
                 self.collectData();
                 self.evaluateConditionals();
+                self.checkAutoNavigation();
             });
             
             // Rating stars
@@ -1515,15 +1516,53 @@ export function generateFormJS(form: Form): string {
             const value = this.formData[rule.questionId] || '';
             const compareValue = rule.value || '';
             
+            // Handle array values (from checkbox fields)
+            const isArray = Array.isArray(value);
+            
             switch (rule.operator) {
-                case 'equals': return String(value) === String(compareValue);
-                case 'not_equals': return String(value) !== String(compareValue);
-                case 'contains': return String(value).toLowerCase().includes(String(compareValue).toLowerCase());
-                case 'not_contains': return !String(value).toLowerCase().includes(String(compareValue).toLowerCase());
-                case 'is_empty': return !value || value === '' || (Array.isArray(value) && value.length === 0);
-                case 'is_not_empty': return value && value !== '' && (!Array.isArray(value) || value.length > 0);
+                case 'equals':
+                    // For arrays (checkboxes), check if the array contains the value
+                    if (isArray) {
+                        return value.includes(compareValue);
+                    }
+                    return String(value) === String(compareValue);
+                case 'not_equals':
+                    if (isArray) {
+                        return !value.includes(compareValue);
+                    }
+                    return String(value) !== String(compareValue);
+                case 'contains':
+                    if (isArray) {
+                        return value.some(v => String(v).toLowerCase().includes(String(compareValue).toLowerCase()));
+                    }
+                    return String(value).toLowerCase().includes(String(compareValue).toLowerCase());
+                case 'not_contains':
+                    if (isArray) {
+                        return !value.some(v => String(v).toLowerCase().includes(String(compareValue).toLowerCase()));
+                    }
+                    return !String(value).toLowerCase().includes(String(compareValue).toLowerCase());
+                case 'is_empty':
+                    if (isArray) {
+                        return value.length === 0;
+                    }
+                    return !value || value === '';
+                case 'is_not_empty':
+                    if (isArray) {
+                        return value.length > 0;
+                    }
+                    return value && value !== '';
                 case 'greater_than': return Number(value) > Number(compareValue);
                 case 'less_than': return Number(value) < Number(compareValue);
+                case 'starts_with':
+                    if (isArray) {
+                        return value.some(v => String(v).startsWith(compareValue));
+                    }
+                    return String(value).startsWith(compareValue);
+                case 'ends_with':
+                    if (isArray) {
+                        return value.some(v => String(v).endsWith(compareValue));
+                    }
+                    return String(value).endsWith(compareValue);
                 default: return true;
             }
         }
@@ -1568,8 +1607,55 @@ export function generateFormJS(form: Form): string {
             return this.currentStep + 1;
         }
         
+        checkAutoNavigation() {
+            const self = this;
+            const step = this.steps.eq(this.currentStep);
+            const stepId = step.data('step-id');
+            const stepConfig = stepsConfig.find(s => s.id === stepId);
+            
+            if (!stepConfig || self.isSubmitting) return;
+            
+            // Check conditional navigation
+            const conditionalNav = stepConfig.conditionalNavigation || [];
+            const sortedNav = [...conditionalNav].sort((a, b) => (b.priority || 0) - (a.priority || 0));
+            
+            for (const nav of sortedNav) {
+                if (this.evaluateCondition(nav.condition)) {
+                    log('Auto-navigation triggered by condition:', nav);
+                    
+                    // Small delay to allow UI to update before navigation
+                    setTimeout(function() {
+                        if (nav.target.type === 'submit') {
+                            self.submitForm();
+                        } else if (nav.target.type === 'specific' && nav.target.stepId) {
+                            const targetIndex = stepsConfig.findIndex(s => s.id === nav.target.stepId);
+                            if (targetIndex !== -1) {
+                                self.goToStep(targetIndex);
+                            }
+                        } else if (nav.target.type === 'next') {
+                            self.goToStep(self.currentStep + 1);
+                        }
+                    }, 300);
+                    
+                    return; // Only trigger the first matching rule
+                }
+            }
+        }
+        
         nextStep() {
-            if (!this.validateCurrentStep()) {
+            const step = this.steps.eq(this.currentStep);
+            const stepId = step.data('step-id');
+            const stepConfig = stepsConfig.find(s => s.id === stepId);
+            
+            // Check if any conditional navigation rule is triggered
+            let conditionalNavMatched = false;
+            if (stepConfig) {
+                const conditionalNav = stepConfig.conditionalNavigation || [];
+                conditionalNavMatched = conditionalNav.some(nav => this.evaluateCondition(nav.condition));
+            }
+            
+            // Only validate if no conditional navigation matched
+            if (!conditionalNavMatched && !this.validateCurrentStep()) {
                 log('Validation failed, staying on current step');
                 return;
             }

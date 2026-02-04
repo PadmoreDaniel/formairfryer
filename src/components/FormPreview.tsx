@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useBuilder } from '../context/BuilderContext';
 import { Question, Condition, ConditionRule } from '../types';
 
@@ -47,6 +47,38 @@ export function FormPreview() {
     }
   }, [currentStep, currentStepIndex, form, formData]);
 
+  // Auto-navigate when conditional navigation is triggered by form data changes
+  useEffect(() => {
+    if (!currentStep || isSubmitting || submitted) return;
+
+    // Check if any conditional navigation rule is triggered
+    const sortedNavigation = [...currentStep.conditionalNavigation].sort(
+      (a, b) => b.priority - a.priority
+    );
+
+    for (const nav of sortedNavigation) {
+      if (evaluateCondition(nav.condition)) {
+        console.log('Auto-navigation triggered by condition:', nav);
+        
+        // Small delay to allow UI to update before navigation
+        setTimeout(async () => {
+          if (nav.target.type === 'submit') {
+            await handleSubmit();
+          } else if (nav.target.type === 'specific' && nav.target.stepId) {
+            const targetIndex = form.steps.findIndex((s) => s.id === nav.target.stepId);
+            if (targetIndex !== -1) {
+              setCurrentStepIndex(targetIndex);
+            }
+          } else if (nav.target.type === 'next') {
+            setCurrentStepIndex(currentStepIndex + 1);
+          }
+        }, 300);
+        
+        return; // Only trigger the first matching rule
+      }
+    }
+  }, [formData, currentStep, currentStepIndex, isSubmitting, submitted, form.steps]);
+
   // Safety check - if no steps exist, don't render (must be after all hooks)
   if (!currentStep) {
     return previewMode ? (
@@ -76,26 +108,54 @@ export function FormPreview() {
     const value = formData[rule.questionId] || '';
     const compareValue = rule.value;
 
+    // Handle array values (from checkbox fields)
+    const isArray = Array.isArray(value);
+    
     switch (rule.operator) {
       case 'equals':
+        // For arrays (checkboxes), check if the array contains the value
+        if (isArray) {
+          return value.includes(compareValue);
+        }
         return value === compareValue;
       case 'not_equals':
+        if (isArray) {
+          return !value.includes(compareValue);
+        }
         return value !== compareValue;
       case 'contains':
+        if (isArray) {
+          return value.some((v: string) => String(v).includes(compareValue));
+        }
         return String(value).includes(compareValue);
       case 'not_contains':
+        if (isArray) {
+          return !value.some((v: string) => String(v).includes(compareValue));
+        }
         return !String(value).includes(compareValue);
       case 'is_empty':
+        if (isArray) {
+          return value.length === 0;
+        }
         return !value || value === '';
       case 'is_not_empty':
+        if (isArray) {
+          return value.length > 0;
+        }
         return value && value !== '';
       case 'greater_than':
         return Number(value) > Number(compareValue);
       case 'less_than':
         return Number(value) < Number(compareValue);
       case 'starts_with':
+        if (isArray) {
+          return value.some((v: string) => String(v).startsWith(compareValue));
+        }
         return String(value).startsWith(compareValue);
       case 'ends_with':
+        if (isArray) {
+          return value.some((v: string) => String(v).endsWith(compareValue));
+        }
         return String(value).endsWith(compareValue);
       default:
         return true;
@@ -122,9 +182,17 @@ export function FormPreview() {
       const value = formData[key];
       const { validation } = question;
 
-      if (validation.required && (!value || value === '')) {
-        newErrors[key] = 'This field is required';
-        return;
+      if (validation.required) {
+        // For checkbox/multiselect (arrays), check if array is empty
+        if (Array.isArray(value) && value.length === 0) {
+          newErrors[key] = 'This field is required';
+          return;
+        }
+        // For other fields, check if empty
+        if (!Array.isArray(value) && (!value || value === '')) {
+          newErrors[key] = 'This field is required';
+          return;
+        }
       }
 
       if (value) {
@@ -177,9 +245,11 @@ export function FormPreview() {
 
     for (const nav of sortedNavigation) {
       if (evaluateCondition(nav.condition)) {
+        console.log('Conditional nav triggered:', nav);
         if (nav.target.type === 'submit') return -1; // Submit form
         if (nav.target.type === 'specific' && nav.target.stepId) {
           const targetIndex = form.steps.findIndex((s) => s.id === nav.target.stepId);
+          console.log('Looking for step:', nav.target.stepId, 'found at index:', targetIndex);
           if (targetIndex !== -1) return targetIndex;
         }
         if (nav.target.type === 'next') {
@@ -198,14 +268,34 @@ export function FormPreview() {
   };
 
   const handleContinue = async () => {
-    if (currentStep.validateOnContinue && !validateStep()) return;
+    // Check if any conditional navigation rule is triggered
+    const conditionalNavMatched = currentStep.conditionalNavigation.some(nav => {
+      const result = evaluateCondition(nav.condition);
+      console.log('Checking conditional nav:', { 
+        condition: nav.condition, 
+        formData, 
+        result 
+      });
+      return result;
+    });
+
+    console.log('Conditional nav matched:', conditionalNavMatched);
+
+    // Only validate if no conditional navigation matched
+    if (!conditionalNavMatched && currentStep.validateOnContinue && !validateStep()) {
+      console.log('Validation failed, stopping');
+      return;
+    }
 
     const nextIndex = getNextStepIndex();
+    console.log('Next step index:', nextIndex, 'Current:', currentStepIndex, 'Total steps:', form.steps.length);
     
     if (nextIndex === -1 || nextIndex >= form.steps.length) {
       // Submit form
+      console.log('Submitting form');
       await handleSubmit();
     } else {
+      console.log('Moving to step index:', nextIndex);
       setCurrentStepIndex(nextIndex);
     }
   };
