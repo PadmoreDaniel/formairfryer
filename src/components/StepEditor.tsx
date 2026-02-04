@@ -1,0 +1,360 @@
+import React, { useState } from 'react';
+import { useBuilder } from '../context/BuilderContext';
+import { Question, QuestionType } from '../types';
+import { questionTypeInfo } from '../utils/defaults';
+
+export function StepEditor() {
+  const { state, dispatch, getSelectedStep } = useBuilder();
+  const step = getSelectedStep();
+  const [editingTitle, setEditingTitle] = useState(false);
+
+  if (!step) {
+    return (
+      <div className="step-editor empty-state">
+        <div className="empty-state-content">
+          <span className="empty-icon">📋</span>
+          <h3>No Step Selected</h3>
+          <p>Select a step from the sidebar or create a new one to get started.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    dispatch({
+      type: 'UPDATE_STEP',
+      payload: { stepId: step.id, updates: { title: e.target.value } },
+    });
+  };
+
+  const handleDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    dispatch({
+      type: 'UPDATE_STEP',
+      payload: { stepId: step.id, updates: { description: e.target.value } },
+    });
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+
+  const handleDrop = (e: React.DragEvent, gridRow?: number) => {
+    e.preventDefault();
+    const questionType = e.dataTransfer.getData('questionType') as QuestionType;
+    if (questionType) {
+      dispatch({
+        type: 'ADD_QUESTION',
+        payload: { stepId: step.id, questionType, gridRow },
+      });
+    }
+  };
+
+  const handleSelectQuestion = (questionId: string | null) => {
+    dispatch({ type: 'SELECT_QUESTION', payload: { questionId } });
+  };
+
+  const handleDeleteQuestion = (questionId: string) => {
+    dispatch({
+      type: 'DELETE_QUESTION',
+      payload: { stepId: step.id, questionId },
+    });
+  };
+
+  const handleDuplicateQuestion = (questionId: string) => {
+    dispatch({
+      type: 'DUPLICATE_QUESTION',
+      payload: { stepId: step.id, questionId },
+    });
+  };
+
+  const handleQuestionDragStart = (e: React.DragEvent, index: number) => {
+    e.dataTransfer.setData('questionIndex', index.toString());
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleQuestionDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    const sourceIndex = parseInt(e.dataTransfer.getData('questionIndex'));
+    if (isNaN(sourceIndex) || sourceIndex === targetIndex) return;
+
+    const newQuestionIds = [...step.questions.map(q => q.id)];
+    const [removed] = newQuestionIds.splice(sourceIndex, 1);
+    newQuestionIds.splice(targetIndex, 0, removed);
+
+    dispatch({
+      type: 'REORDER_QUESTIONS',
+      payload: { stepId: step.id, questionIds: newQuestionIds },
+    });
+  };
+
+  return (
+    <div className="step-editor">
+      <div className="step-header">
+        <div className="step-title-section">
+          {editingTitle ? (
+            <input
+              type="text"
+              value={step.title}
+              onChange={handleTitleChange}
+              onBlur={() => setEditingTitle(false)}
+              onKeyDown={(e) => e.key === 'Enter' && setEditingTitle(false)}
+              className="step-title-input"
+              autoFocus
+            />
+          ) : (
+            <h2
+              className="step-title"
+              onClick={() => setEditingTitle(true)}
+              title="Click to edit"
+            >
+              {step.title}
+              <span className="edit-icon">✏️</span>
+            </h2>
+          )}
+        </div>
+        
+        <textarea
+          value={step.description || ''}
+          onChange={handleDescriptionChange}
+          placeholder="Add a description for this step (optional)"
+          className="step-description-input"
+          rows={2}
+        />
+      </div>
+
+      <div
+        className="questions-grid"
+        onDragOver={handleDragOver}
+        onDrop={(e) => handleDrop(e)}
+        style={{
+          display: 'grid',
+          gridTemplateColumns: `repeat(${step.gridColumns}, 1fr)`,
+          gap: `${step.gridGap}px`,
+        }}
+      >
+        {step.questions.length === 0 ? (
+          <div className="questions-empty-state">
+            <div className="drop-zone">
+              <span className="drop-icon">📥</span>
+              <p>Drag and drop questions here</p>
+              <p className="drop-hint">or click a question type from the palette</p>
+            </div>
+          </div>
+        ) : (
+          step.questions.map((question, index) => (
+            <div
+              key={question.id}
+              className={`question-card ${state.selectedQuestionId === question.id ? 'selected' : ''}`}
+              style={{
+                gridColumn: `${question.gridColumn} / span ${question.gridColumnSpan}`,
+                gridRow: question.gridRow,
+              }}
+              onClick={() => handleSelectQuestion(question.id)}
+              draggable
+              onDragStart={(e) => handleQuestionDragStart(e, index)}
+              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              onDrop={(e) => { e.stopPropagation(); handleQuestionDrop(e, index); }}
+            >
+              <div className="question-card-header">
+                <span className="question-type-badge">
+                  {questionTypeInfo[question.type]?.icon} {questionTypeInfo[question.type]?.label}
+                </span>
+                <div className="question-card-actions">
+                  <button
+                    className="btn-icon"
+                    onClick={(e) => { e.stopPropagation(); handleDuplicateQuestion(question.id); }}
+                    title="Duplicate"
+                  >
+                    📋
+                  </button>
+                  <button
+                    className="btn-icon btn-delete"
+                    onClick={(e) => { e.stopPropagation(); handleDeleteQuestion(question.id); }}
+                    title="Delete"
+                  >
+                    🗑️
+                  </button>
+                </div>
+              </div>
+              <div className="question-card-content">
+                <span className="question-label">{question.label}</span>
+                {question.validation.required && (
+                  <span className="required-badge">Required</span>
+                )}
+              </div>
+              <div className="question-preview">
+                <QuestionPreview question={question} />
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="step-navigation-config">
+        <h4>⚙️ Step Navigation</h4>
+        <div className="navigation-buttons">
+          <div className="nav-button-config">
+            <label>
+              <input
+                type="checkbox"
+                checked={step.backButton.enabled}
+                onChange={(e) =>
+                  dispatch({
+                    type: 'UPDATE_STEP',
+                    payload: {
+                      stepId: step.id,
+                      updates: {
+                        backButton: { ...step.backButton, enabled: e.target.checked },
+                      },
+                    },
+                  })
+                }
+              />
+              Show Back Button
+            </label>
+            {step.backButton.enabled && (
+              <input
+                type="text"
+                value={step.backButton.label}
+                onChange={(e) =>
+                  dispatch({
+                    type: 'UPDATE_STEP',
+                    payload: {
+                      stepId: step.id,
+                      updates: {
+                        backButton: { ...step.backButton, label: e.target.value },
+                      },
+                    },
+                  })
+                }
+                placeholder="Button label"
+                className="nav-button-label-input"
+              />
+            )}
+          </div>
+          
+          <div className="nav-button-config">
+            <label>
+              <input
+                type="checkbox"
+                checked={step.continueButton.enabled}
+                onChange={(e) =>
+                  dispatch({
+                    type: 'UPDATE_STEP',
+                    payload: {
+                      stepId: step.id,
+                      updates: {
+                        continueButton: { ...step.continueButton, enabled: e.target.checked },
+                      },
+                    },
+                  })
+                }
+              />
+              Show Continue Button
+            </label>
+            {step.continueButton.enabled && (
+              <input
+                type="text"
+                value={step.continueButton.label}
+                onChange={(e) =>
+                  dispatch({
+                    type: 'UPDATE_STEP',
+                    payload: {
+                      stepId: step.id,
+                      updates: {
+                        continueButton: { ...step.continueButton, label: e.target.value },
+                      },
+                    },
+                  })
+                }
+                placeholder="Button label"
+                className="nav-button-label-input"
+              />
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Question Preview Component
+function QuestionPreview({ question }: { question: Question }) {
+  switch (question.type) {
+    case 'text':
+    case 'email':
+    case 'phone':
+    case 'number':
+      return (
+        <input
+          type="text"
+          placeholder={question.placeholder}
+          disabled
+          className="preview-input"
+        />
+      );
+    case 'textarea':
+      return (
+        <textarea
+          placeholder={question.placeholder}
+          disabled
+          className="preview-textarea"
+          rows={2}
+        />
+      );
+    case 'radio':
+      return (
+        <div className="preview-options">
+          {question.options?.slice(0, 3).map((opt) => (
+            <label key={opt.id} className="preview-option">
+              <input type="radio" disabled /> {opt.label}
+            </label>
+          ))}
+          {(question.options?.length || 0) > 3 && (
+            <span className="preview-more">+{(question.options?.length || 0) - 3} more</span>
+          )}
+        </div>
+      );
+    case 'checkbox':
+      return (
+        <div className="preview-options">
+          {question.options?.slice(0, 3).map((opt) => (
+            <label key={opt.id} className="preview-option">
+              <input type="checkbox" disabled /> {opt.label}
+            </label>
+          ))}
+          {(question.options?.length || 0) > 3 && (
+            <span className="preview-more">+{(question.options?.length || 0) - 3} more</span>
+          )}
+        </div>
+      );
+    case 'select':
+    case 'multiselect':
+      return (
+        <select disabled className="preview-select">
+          <option>{question.placeholder || 'Select...'}</option>
+        </select>
+      );
+    case 'date':
+      return <input type="date" disabled className="preview-input" />;
+    case 'time':
+      return <input type="time" disabled className="preview-input" />;
+    case 'rating':
+      return (
+        <div className="preview-rating">
+          {'⭐'.repeat(5)}
+        </div>
+      );
+    case 'slider':
+      return <input type="range" disabled className="preview-slider" />;
+    case 'file':
+      return (
+        <div className="preview-file">
+          <span>📎 Choose file...</span>
+        </div>
+      );
+    default:
+      return <div className="preview-default">Preview</div>;
+  }
+}
