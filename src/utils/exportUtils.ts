@@ -158,12 +158,8 @@ class ${toPascalCase(pluginSettings.pluginSlug)}_Plugin {
     }
     
     public function enqueue_scripts() {
-        wp_enqueue_style(
-            '${pluginSettings.pluginSlug}-styles',
-            ${pluginSettings.pluginSlug.toUpperCase().replace(/-/g, '_')}_PLUGIN_URL . 'assets/css/form-styles.css',
-            array(),
-            ${pluginSettings.pluginSlug.toUpperCase().replace(/-/g, '_')}_VERSION
-        );
+        // CSS is injected into Shadow DOM via JavaScript, not enqueued globally
+        // This prevents WordPress theme conflicts completely
         
         wp_enqueue_script(
             '${pluginSettings.pluginSlug}-handler',
@@ -175,6 +171,10 @@ class ${toPascalCase(pluginSettings.pluginSlug)}_Plugin {
         
         $form_config = $this->get_form_config();
         
+        // Load CSS content for Shadow DOM injection
+        $css_file = ${pluginSettings.pluginSlug.toUpperCase().replace(/-/g, '_')}_PLUGIN_DIR . 'assets/css/form-styles.css';
+        $css_content = file_exists($css_file) ? file_get_contents($css_file) : '';
+        
         // Debug: log what we're passing to JS
         if (defined('WP_DEBUG') && WP_DEBUG) {
             error_log('WP Form Config: ' . print_r($form_config, true));
@@ -184,6 +184,8 @@ class ${toPascalCase(pluginSettings.pluginSlug)}_Plugin {
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('${pluginSettings.pluginSlug}_nonce'),
             'formConfig' => $form_config,
+            'cssContent' => $css_content,
+            'pluginSlug' => '${pluginSettings.pluginSlug}',
             'debug' => true,
             'configPath' => ${pluginSettings.pluginSlug.toUpperCase().replace(/-/g, '_')}_PLUGIN_DIR . 'form-config.json'
         ));
