@@ -169,15 +169,23 @@ class ${toPascalCase(pluginSettings.pluginSlug)}_Plugin {
             '${pluginSettings.pluginSlug}-handler',
             ${pluginSettings.pluginSlug.toUpperCase().replace(/-/g, '_')}_PLUGIN_URL . 'assets/js/form-handler.js',
             array('jquery'),
-            ${pluginSettings.pluginSlug.toUpperCase().replace(/-/g, '_')}_VERSION,
+            ${pluginSettings.pluginSlug.toUpperCase().replace(/-/g, '_')}_VERSION . '.' . time(),
             true
         );
+        
+        $form_config = $this->get_form_config();
+        
+        // Debug: log what we're passing to JS
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('WP Form Config: ' . print_r($form_config, true));
+        }
         
         wp_localize_script('${pluginSettings.pluginSlug}-handler', '${toCamelCase(pluginSettings.pluginSlug)}Config', array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('${pluginSettings.pluginSlug}_nonce'),
-            'formConfig' => $this->get_form_config(),
-            'debug' => true
+            'formConfig' => $form_config,
+            'debug' => true,
+            'configPath' => ${pluginSettings.pluginSlug.toUpperCase().replace(/-/g, '_')}_PLUGIN_DIR . 'form-config.json'
         ));
     }
     

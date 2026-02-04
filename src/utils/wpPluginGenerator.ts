@@ -1005,10 +1005,19 @@ function generateQuestionHTML(question: Question, gridColumns: number): string {
                 </div>`;
 }
 
+// Helper: Convert kebab-case to camelCase (must match PHP wp_localize_script variable name)
+function toCamelCase(str: string): string {
+  return str
+    .split('-')
+    .map((word, index) => index === 0 ? word : word.charAt(0).toUpperCase() + word.slice(1))
+    .join('');
+}
+
 // Generate Form JavaScript
 export function generateFormJS(form: Form): string {
   const { pluginSettings, progressConfig } = form;
-  const configVar = pluginSettings.pluginSlug.replace(/-/g, '') + 'Config';
+  // IMPORTANT: This must match the variable name used in PHP wp_localize_script
+  const configVar = toCamelCase(pluginSettings.pluginSlug) + 'Config';
   
   return `/**
  * Form Handler JavaScript
@@ -1021,7 +1030,11 @@ export function generateFormJS(form: Form): string {
     const config = window.${configVar} || {};
     // PHP now returns formConfig as the form object directly (not wrapped in {version, exportedAt, form})
     const formConfig = config.formConfig || {};
-    const progressConfig = formConfig.progressConfig || { enabled: true, mode: 'exponential', position: 'card-top' };
+    
+    // Check if config loaded properly
+    const configLoaded = formConfig && formConfig.steps && formConfig.steps.length > 0;
+    
+    const progressConfig = formConfig.progressConfig || { enabled: true, mode: 'linear', position: 'top' };
     const stepsConfig = formConfig.steps || [];
     const submissionConfig = formConfig.submissionConfig || {};
     
@@ -1034,11 +1047,24 @@ export function generateFormJS(form: Form): string {
     // Log initial config load
     log('=== Form Config Debug ===');
     log('Raw config object:', config);
+    log('Config path from PHP:', config.configPath);
     log('formConfig:', formConfig);
+    log('Config loaded properly:', configLoaded);
+    log('Progress mode:', progressConfig.mode);
     
     // Check for errors from PHP
     if (formConfig.error) {
         console.error('[WP-Form] PHP Error:', formConfig.error, formConfig.message || formConfig.path || '');
+    }
+    
+    // Show visible warning if config failed to load
+    if (!configLoaded) {
+        console.error('[WP-Form] CRITICAL: Form configuration did not load properly!');
+        console.error('[WP-Form] This means validation rules and progress weights will NOT work.');
+        console.error('[WP-Form] Please check:');
+        console.error('[WP-Form]   1. form-config.json exists in the plugin folder');
+        console.error('[WP-Form]   2. The JSON file is valid (no syntax errors)');
+        console.error('[WP-Form]   3. PHP has permission to read the file');
     }
     
     log('formConfig.steps:', formConfig.steps);
@@ -1053,9 +1079,8 @@ export function generateFormJS(form: Form): string {
             log('First question validation:', stepsConfig[0].questions[0].validation);
         }
     } else {
-        console.warn('[WP-Form] WARNING: stepsConfig is empty! Validation will not work.');
-        console.warn('[WP-Form] This usually means the form-config.json file was not properly loaded.');
-        console.warn('[WP-Form] Please ensure you re-exported and re-uploaded the plugin.');
+        console.warn('[WP-Form] WARNING: stepsConfig is empty! Validation rules from config will not work.');
+        console.warn('[WP-Form] Falling back to HTML5 required attribute validation only.');
     }
     log('=========================');
     
@@ -1293,21 +1318,25 @@ export function generateFormJS(form: Form): string {
                 const questionConfig = questionsArray.find(q => q.id === questionId) || {};
                 const validation = questionConfig.validation || {};
                 
+                // Fallback: check if the input has HTML5 required attribute
+                const $input = $field.find('input, textarea, select').not('[type="hidden"]').first();
+                const hasRequiredAttr = $input.prop('required') || $input.attr('required');
+                const isRequired = validation.required || hasRequiredAttr;
+                
                 log('Question config for', questionId, ':', questionConfig);
-                log('Validation rules:', validation);
+                log('Validation rules:', validation, 'HTML required:', hasRequiredAttr, 'Final isRequired:', isRequired);
                 
                 // Clear previous errors
                 $field.removeClass('has-error');
                 $field.find('.wp-form-field-error').hide().text('');
                 
-                // Get the input element
-                const $input = $field.find('input, textarea, select').not('[type="hidden"]').first();
+                // $input is already defined above, no need to redeclare
                 if (!$input.length) {
                     // Check for hidden input (rating)
                     const $hidden = $field.find('input[type="hidden"]');
                     if ($hidden.length) {
                         const value = $hidden.val();
-                        if (validation.required && (!value || value === '')) {
+                        if (isRequired && (!value || value === '')) {
                             $field.addClass('has-error');
                             $field.find('.wp-form-field-error').text('This field is required').show();
                             isValid = false;
@@ -1327,11 +1356,11 @@ export function generateFormJS(form: Form): string {
                 }
                 
                 // Required validation
-                if (validation.required && (!value || value === '')) {
+                if (isRequired && (!value || value === '')) {
                     $field.addClass('has-error');
                     $field.find('.wp-form-field-error').text('This field is required').show();
                     isValid = false;
-                    log('Validation failed: required', questionId);
+                    log('Validation FAILED: required field empty', questionId, 'isValid now:', isValid);
                     return;
                 }
                 
@@ -1415,8 +1444,11 @@ export function generateFormJS(form: Form): string {
                 }
             });
             
+            log('After validation loop, isValid =', isValid);
+            
             // Scroll to first error
             if (!isValid) {
+                log('Validation FAILED - blocking navigation');
                 const firstError = step.find('.has-error').first();
                 if (firstError.length) {
                     $('html, body').animate({
@@ -1425,7 +1457,7 @@ export function generateFormJS(form: Form): string {
                 }
             }
             
-            log('Validation result', isValid);
+            log('Validation result returning:', isValid);
             return isValid;
         }
         
@@ -1696,10 +1728,17 @@ export function generateFormJS(form: Form): string {
         }
     }
     
-    // Initialize when DOM is ready
+    // Initialize when DOM is ready - with guard against double initialization
     $(document).ready(function() {
         log('Initializing form handlers');
         $('.wp-form .wp-form-container').each(function() {
+            const $form = $(this);
+            // Check if already initialized
+            if ($form.data('wp-form-initialized')) {
+                log('Form already initialized, skipping');
+                return;
+            }
+            $form.data('wp-form-initialized', true);
             new FormHandler(this);
         });
     });
