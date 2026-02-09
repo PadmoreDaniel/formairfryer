@@ -157,6 +157,57 @@ export function FormSettings() {
                 placeholder="https://example.com/thank-you"
               />
             </div>
+
+            <h4 style={{ marginTop: '24px', marginBottom: '12px', borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>Success Screen Design</h4>
+
+            <div className="form-group">
+              <label>Success Icon</label>
+              <input
+                type="text"
+                value={form.submissionConfig.successIcon || ''}
+                onChange={(e) => updateSubmissionConfig({ successIcon: e.target.value })}
+                placeholder="✅"
+              />
+              <span className="hint">Emoji or text for success screen (e.g., ✅, 🎉, ✓)</span>
+            </div>
+
+            <div className="form-group">
+              <label>Success Background Color</label>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <input
+                  type="color"
+                  value={form.submissionConfig.successBackgroundColor || '#ffffff'}
+                  onChange={(e) => updateSubmissionConfig({ successBackgroundColor: e.target.value })}
+                  style={{ width: '50px', height: '36px', padding: '2px', cursor: 'pointer' }}
+                />
+                <input
+                  type="text"
+                  value={form.submissionConfig.successBackgroundColor || ''}
+                  onChange={(e) => updateSubmissionConfig({ successBackgroundColor: e.target.value })}
+                  placeholder="Leave empty for default"
+                  style={{ flex: 1 }}
+                />
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label>Success Text Color</label>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <input
+                  type="color"
+                  value={form.submissionConfig.successTextColor || '#10B981'}
+                  onChange={(e) => updateSubmissionConfig({ successTextColor: e.target.value })}
+                  style={{ width: '50px', height: '36px', padding: '2px', cursor: 'pointer' }}
+                />
+                <input
+                  type="text"
+                  value={form.submissionConfig.successTextColor || ''}
+                  onChange={(e) => updateSubmissionConfig({ successTextColor: e.target.value })}
+                  placeholder="Leave empty for default"
+                  style={{ flex: 1 }}
+                />
+              </div>
+            </div>
           </div>
         )}
 

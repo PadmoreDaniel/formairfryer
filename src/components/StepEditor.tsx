@@ -198,6 +198,30 @@ export function StepEditor() {
             <label>
               <input
                 type="checkbox"
+                checked={step.autoAdvance || false}
+                onChange={(e) =>
+                  dispatch({
+                    type: 'UPDATE_STEP',
+                    payload: {
+                      stepId: step.id,
+                      updates: { autoAdvance: e.target.checked },
+                    },
+                  })
+                }
+              />
+              Auto-advance on single question
+            </label>
+            {step.autoAdvance && (
+              <span className="help-text" style={{ display: 'block', fontSize: '0.8em', color: '#666', marginTop: '4px' }}>
+                When enabled and this step has only one question, the form will automatically advance to the next step when answered.
+              </span>
+            )}
+          </div>
+          
+          <div className="nav-button-config">
+            <label>
+              <input
+                type="checkbox"
                 checked={step.backButton.enabled}
                 onChange={(e) =>
                   dispatch({
@@ -294,6 +318,36 @@ function QuestionPreview({ question }: { question: Question }) {
           className="preview-input"
         />
       );
+    case 'currency':
+      return (
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+          <span style={{ position: 'absolute', left: '8px', color: '#666', fontWeight: 500 }}>€</span>
+          <input
+            type="text"
+            placeholder={question.placeholder || '0.00'}
+            disabled
+            className="preview-input"
+            style={{ paddingLeft: '24px' }}
+          />
+        </div>
+      );
+    case 'numberplate':
+      return (
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+          <img 
+            src="/numberplate.png" 
+            alt="Number Plate" 
+            style={{ position: 'absolute', left: '6px', height: '18px', width: 'auto' }}
+          />
+          <input
+            type="text"
+            placeholder={question.placeholder || 'e.g. 191-D-12345'}
+            disabled
+            className="preview-input"
+            style={{ paddingLeft: '32px' }}
+          />
+        </div>
+      );
     case 'textarea':
       return (
         <textarea
@@ -352,6 +406,15 @@ function QuestionPreview({ question }: { question: Question }) {
       return (
         <div className="preview-file">
           <span>📎 Choose file...</span>
+        </div>
+      );
+    case 'privacy_policy':
+      return (
+        <div className="preview-privacy" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <input type="checkbox" disabled />
+          <span style={{ fontSize: '0.85em' }}>
+            I agree to the <span style={{ color: '#048080', textDecoration: 'underline' }}>Privacy Policy</span>
+          </span>
         </div>
       );
     default:

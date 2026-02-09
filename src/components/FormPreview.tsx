@@ -211,6 +211,16 @@ export function FormPreview() {
           }
         }
         
+        // Number plate validation
+        if (question.type === 'numberplate') {
+          const plateVal = String(value).toUpperCase();
+          // Pattern: 2-3 digits, dash, 1-2 letters, dash, 1-6 digits
+          const numberPlateRegex = /^\d{2,3}-[A-Z]{1,2}-\d{1,6}$/;
+          if (!numberPlateRegex.test(plateVal)) {
+            newErrors[key] = 'Please enter a valid number plate (e.g. 191-D-12345)';
+          }
+        }
+        
         if (validation.minLength && String(value).length < validation.minLength) {
           newErrors[key] = `Minimum ${validation.minLength} characters required`;
         }
@@ -332,6 +342,25 @@ export function FormPreview() {
         return newErrors;
       });
     }
+    
+    // Auto-advance for single question steps when enabled
+    if (currentStep.autoAdvance && currentStep.questions.length === 1) {
+      // Check if the question has a valid value
+      const hasValidValue = value !== '' && value !== null && value !== undefined && 
+        !(Array.isArray(value) && value.length === 0);
+      
+      if (hasValidValue) {
+        // Small delay to show the selection before advancing
+        setTimeout(() => {
+          const nextIndex = getNextStepIndex();
+          if (nextIndex === -1 || nextIndex >= form.steps.length) {
+            handleSubmit();
+          } else {
+            setCurrentStepIndex(nextIndex);
+          }
+        }, 400);
+      }
+    }
   };
 
   const resetPreview = () => {
@@ -427,9 +456,14 @@ export function FormPreview() {
             }}
           >
           {submitted ? (
-            <div className="submission-success" style={{ padding: theme.spacing.formPadding }}>
-              <span className="success-icon">✅</span>
-              <h3>{form.submissionConfig.successMessage}</h3>
+            <div className="submission-success" style={{ 
+              padding: theme.spacing.formPadding,
+              backgroundColor: form.submissionConfig.successBackgroundColor || undefined 
+            }}>
+              <span className="success-icon">{form.submissionConfig.successIcon || '✅'}</span>
+              <h3 style={{ color: form.submissionConfig.successTextColor || theme.colors.success }}>
+                {form.submissionConfig.successMessage}
+              </h3>
               <button className="btn-primary" onClick={resetPreview}>
                 Start Over
               </button>
@@ -602,6 +636,40 @@ function QuestionField({
             max={question.validation.max}
             style={inputStyle}
           />
+        );
+      
+      case 'currency':
+        return (
+          <div className="input-with-adornment" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <span 
+              className="input-adornment input-adornment-start"
+              style={{
+                position: 'absolute',
+                left: '12px',
+                color: theme.colors.textMuted,
+                fontSize: theme.inputs.fontSize,
+                fontWeight: 500,
+                zIndex: 1,
+                pointerEvents: 'none'
+              }}
+            >
+              €
+            </span>
+            <input
+              type="number"
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              placeholder={question.placeholder || '0.00'}
+              min={question.validation.min}
+              max={question.validation.max}
+              step="0.01"
+              style={{
+                ...inputStyle,
+                paddingLeft: '32px',
+                width: '100%'
+              }}
+            />
+          </div>
         );
       
       case 'textarea':
@@ -820,33 +888,81 @@ function QuestionField({
       
       case 'numberplate':
         return (
-          <input
-            type="text"
-            value={value}
-            onChange={(e) => {
-              // Format number plate: YY-C-NNNNNN
-              let v = e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
-              let noDashes = v.replace(/-/g, '');
-              let year = '', county = '', seq = '';
-              let i = 0;
-              while (i < noDashes.length && /\d/.test(noDashes[i]) && year.length < 3) {
-                year += noDashes[i]; i++;
-              }
-              while (i < noDashes.length && /[A-Z]/.test(noDashes[i]) && county.length < 2) {
-                county += noDashes[i]; i++;
-              }
-              while (i < noDashes.length && /\d/.test(noDashes[i]) && seq.length < 6) {
-                seq += noDashes[i]; i++;
-              }
-              let result = year;
-              if (county) result += '-' + county;
-              if (seq) result += '-' + seq;
-              onChange(result);
-            }}
-            placeholder={question.placeholder || 'e.g. 191-D-12345'}
-            maxLength={12}
-            style={{ ...inputStyle, textTransform: 'uppercase' }}
-          />
+          <div className="input-with-adornment" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+            <img 
+              src="/numberplate.png" 
+              alt="Number Plate" 
+              className="input-adornment input-adornment-start"
+              style={{
+                position: 'absolute',
+                left: '8px',
+                height: '36px',
+                width: 'auto',
+                zIndex: 1,
+                pointerEvents: 'none'
+              }}
+            />
+            <input
+              type="text"
+              value={value}
+              onChange={(e) => {
+                // Format number plate: YY-C-NNNNNN
+                let v = e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '');
+                let noDashes = v.replace(/-/g, '');
+                let year = '', county = '', seq = '';
+                let i = 0;
+                while (i < noDashes.length && /\d/.test(noDashes[i]) && year.length < 3) {
+                  year += noDashes[i]; i++;
+                }
+                while (i < noDashes.length && /[A-Z]/.test(noDashes[i]) && county.length < 2) {
+                  county += noDashes[i]; i++;
+                }
+                while (i < noDashes.length && /\d/.test(noDashes[i]) && seq.length < 6) {
+                  seq += noDashes[i]; i++;
+                }
+                let result = year;
+                if (county) result += '-' + county;
+                if (seq) result += '-' + seq;
+                onChange(result);
+              }}
+              placeholder={question.placeholder || 'e.g. 191-D-12345'}
+              maxLength={12}
+              style={{ 
+                ...inputStyle, 
+                textTransform: 'uppercase',
+                paddingLeft: '40px',
+                width: '100%'
+              }}
+            />
+          </div>
+        );
+      
+      case 'privacy_policy':
+        const policyUrl = question.privacyPolicyUrl || '#';
+        const policyText = question.privacyPolicyText || 'I agree to the';
+        return (
+          <div className="privacy-policy-field">
+            <label className="checkbox-option" style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={value === true || value === 'true' || value === 'accepted'}
+                onChange={(e) => onChange(e.target.checked ? 'accepted' : '')}
+                style={{ marginTop: '3px' }}
+              />
+              <span>
+                {policyText}{' '}
+                <a 
+                  href={policyUrl} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  style={{ color: theme.colors.primary, textDecoration: 'underline' }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Privacy Policy
+                </a>
+              </span>
+            </label>
+          </div>
         );
       
       default:

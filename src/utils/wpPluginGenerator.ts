@@ -738,6 +738,71 @@ export function generateThemeCSS(theme: Theme): string {
 /* Number Plate Field */
 .wp-form-numberplate-input {
   text-transform: uppercase;
+  padding-left: 40px !important;
+}
+
+/* Input with Adornment */
+.wp-form-input-with-adornment {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.wp-form-input-adornment {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.wp-form-input-adornment-start {
+  left: 12px;
+  color: var(--wp-form-text-muted, #666);
+  font-weight: 500;
+  font-size: ${theme.inputs.fontSize}px;
+}
+
+.wp-form-numberplate-icon {
+  left: 8px;
+  height: 40px;
+  width: auto;
+}
+
+.wp-form-currency-input {
+  padding-left: 32px !important;
+  width: 100%;
+}
+
+.wp-form-input-with-adornment .wp-form-field-input {
+  width: 100%;
+}
+
+/* Privacy Policy Field */
+.wp-form-privacy-policy {
+  margin: 8px 0;
+}
+
+.wp-form-privacy-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+  font-size: ${theme.inputs.fontSize}px;
+  line-height: 1.5;
+}
+
+.wp-form-privacy-checkbox {
+  margin-top: 3px;
+  width: auto !important;
+  flex-shrink: 0;
+}
+
+.wp-form-privacy-link {
+  color: var(--wp-form-primary);
+  text-decoration: underline;
+}
+
+.wp-form-privacy-link:hover {
+  text-decoration: none;
 }
 
 /* Custom CSS */
@@ -825,9 +890,9 @@ $instance_id = '${escapePhpString(pluginSettings.pluginSlug)}-' . uniqid();
             
         </form>
         
-        <div class="wp-form-success" style="display: none;">
-            <div class="wp-form-success-icon">✅</div>
-            <p class="wp-form-success-message"><?php echo esc_html('${successMsg}'); ?></p>
+        <div class="wp-form-success" style="display: none;${form.submissionConfig.successBackgroundColor ? ` background-color: ${form.submissionConfig.successBackgroundColor};` : ''}">
+            <div class="wp-form-success-icon">${form.submissionConfig.successIcon || '✅'}</div>
+            <p class="wp-form-success-message"${form.submissionConfig.successTextColor ? ` style="color: ${form.submissionConfig.successTextColor};"` : ''}><?php echo esc_html('${successMsg}'); ?></p>
         </div>
         
         <?php if (${progressConfig.enabled ? 'true' : 'false'} && '${position}' === 'card-bottom'): ?>
@@ -993,14 +1058,50 @@ function generateQuestionHTML(question: Question, gridColumns: number): string {
                 <a href="https://finder.eircode.ie/" target="_blank" class="wp-form-eircode-finder" style="display: none;">Find your Eircode</a>`;
       break;
     
+    case 'currency':
+      inputHTML = `<div class="wp-form-input-with-adornment">
+                    <span class="wp-form-input-adornment wp-form-input-adornment-start">€</span>
+                    <input type="number" 
+                      class="wp-form-field-input wp-form-currency-input" 
+                      name="${fieldName}" 
+                      id="${questionId}"
+                      placeholder="<?php echo esc_attr('${placeholder || '0.00'}'); ?>"
+                      step="0.01"
+                      ${question.validation.min !== undefined ? `min="${question.validation.min}"` : ''}
+                      ${question.validation.max !== undefined ? `max="${question.validation.max}"` : ''}
+                      ${required ? 'required' : ''}>
+                </div>`;
+      break;
+    
     case 'numberplate':
-      inputHTML = `<input type="text" 
-                    class="wp-form-field-input wp-form-numberplate-input" 
-                    name="${fieldName}" 
-                    id="${questionId}"
-                    placeholder="<?php echo esc_attr('${placeholder || 'e.g. 191-D-12345'}'); ?>"
-                    maxlength="12"
-                    ${required ? 'required' : ''}>`;
+      inputHTML = `<div class="wp-form-input-with-adornment">
+                    <img src="data:image/png;base64,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" alt="Number Plate" class="wp-form-input-adornment wp-form-input-adornment-start wp-form-numberplate-icon">
+                    <input type="text" 
+                      class="wp-form-field-input wp-form-numberplate-input" 
+                      name="${fieldName}" 
+                      id="${questionId}"
+                      placeholder="<?php echo esc_attr('${placeholder || 'e.g. 191-D-12345'}'); ?>"
+                      maxlength="12"
+                      ${required ? 'required' : ''}>
+                </div>`;
+      break;
+    
+    case 'privacy_policy':
+      const policyUrl = escapePhpString(question.privacyPolicyUrl || '#');
+      const policyText = escapePhpString(question.privacyPolicyText || 'I agree to the');
+      inputHTML = `<div class="wp-form-privacy-policy">
+                    <label class="wp-form-privacy-label">
+                      <input type="checkbox" 
+                        class="wp-form-field-input wp-form-privacy-checkbox" 
+                        name="${fieldName}" 
+                        id="${questionId}"
+                        value="accepted"
+                        ${required ? 'required' : ''}>
+                      <span><?php echo esc_html('${policyText}'); ?> 
+                        <a href="<?php echo esc_url('${policyUrl}'); ?>" target="_blank" rel="noopener noreferrer" class="wp-form-privacy-link">Privacy Policy</a>
+                      </span>
+                    </label>
+                </div>`;
       break;
     
     case 'hidden':
@@ -1044,6 +1145,16 @@ export function generateFormJS(form: Form): string {
 
 (function($) {
     'use strict';
+    
+    // Disable console.log on production sites (not localhost or formairfryer.web.app)
+    const isDevEnvironment = window.location.hostname === 'localhost' || 
+                             window.location.hostname === '127.0.0.1' ||
+                             window.location.origin === 'https://formairfryer.web.app';
+    if (!isDevEnvironment) {
+        console.log = function() {};
+        console.debug = function() {};
+        console.info = function() {};
+    }
     
     const config = window.${configVar} || {};
     // PHP now returns formConfig as the form object directly (not wrapped in {version, exportedAt, form})
@@ -1640,6 +1751,31 @@ export function generateFormJS(form: Form): string {
                     return; // Only trigger the first matching rule
                 }
             }
+            
+            // Check auto-advance for single question steps
+            if (stepConfig.autoAdvance && stepConfig.questions && stepConfig.questions.length === 1) {
+                const question = stepConfig.questions[0];
+                const fieldName = question.fieldName || question.id;
+                const value = this.formData[fieldName];
+                
+                // Check if the question has a valid value
+                const hasValidValue = value !== '' && value !== null && value !== undefined && 
+                    !(Array.isArray(value) && value.length === 0);
+                
+                if (hasValidValue) {
+                    log('Auto-advance triggered for single question step:', stepConfig.title);
+                    
+                    // Small delay to show the selection before advancing
+                    setTimeout(function() {
+                        const nextIndex = self.getNextStepIndex();
+                        if (nextIndex === -1 || nextIndex >= self.totalSteps) {
+                            self.submitForm();
+                        } else {
+                            self.goToStep(nextIndex);
+                        }
+                    }, 400);
+                }
+            }
         }
         
         nextStep() {
@@ -1687,10 +1823,14 @@ export function generateFormJS(form: Form): string {
                 self.updateProgress();
                 self.evaluateConditionals();
                 
-                // Scroll to top of form
-                $('html, body').animate({
-                    scrollTop: self.container.offset().top - 50
-                }, 300);
+                // Only scroll if the form is out of view (above viewport)
+                const formTop = self.container.offset().top;
+                const viewportTop = $(window).scrollTop();
+                if (formTop < viewportTop) {
+                    $('html, body').animate({
+                        scrollTop: formTop - 50
+                    }, 300);
+                }
             });
         }
         

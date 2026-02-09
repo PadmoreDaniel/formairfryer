@@ -103,6 +103,7 @@ Available question types:
 - email: Email address input with validation
 - phone: Phone number input
 - number: Numeric input
+- currency: Currency input with Euro symbol
 - radio: Single choice from options
 - checkbox: Multiple choice from options
 - select: Dropdown selection
@@ -115,6 +116,7 @@ Available question types:
 - slider: Range slider
 - eircode: Irish postcode
 - numberplate: Vehicle registration
+- privacy_policy: Privacy policy acceptance checkbox with link
 
 Respond ONLY with a valid JSON object in this exact format:
 {

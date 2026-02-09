@@ -69,6 +69,7 @@ export function QuestionEditor() {
     email: 'Email',
     phone: 'Phone',
     number: 'Number',
+    currency: 'Currency',
     radio: 'Single Choice',
     checkbox: 'Multiple Choice',
     select: 'Dropdown',
@@ -82,6 +83,7 @@ export function QuestionEditor() {
     hidden: 'Hidden Field',
     eircode: 'Eircode',
     numberplate: 'Number Plate',
+    privacy_policy: 'Privacy Policy',
   };
 
   return (
@@ -145,6 +147,31 @@ export function QuestionEditor() {
               placeholder="Value for hidden field..."
             />
           </div>
+        )}
+
+        {selectedQuestion.type === 'privacy_policy' && (
+          <>
+            <div className="form-group">
+              <label>Checkbox Text</label>
+              <input
+                type="text"
+                value={selectedQuestion.privacyPolicyText || ''}
+                onChange={(e) => updateQuestion({ privacyPolicyText: e.target.value })}
+                placeholder="I agree to the"
+              />
+              <span className="form-hint">Text displayed before the Privacy Policy link</span>
+            </div>
+            <div className="form-group">
+              <label>Privacy Policy URL</label>
+              <input
+                type="url"
+                value={selectedQuestion.privacyPolicyUrl || ''}
+                onChange={(e) => updateQuestion({ privacyPolicyUrl: e.target.value })}
+                placeholder="https://example.com/privacy-policy"
+              />
+              <span className="form-hint">Link to your privacy policy page</span>
+            </div>
+          </>
         )}
       </div>
 

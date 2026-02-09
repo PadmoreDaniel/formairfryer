@@ -7,6 +7,7 @@ export type QuestionType =
   | 'email'
   | 'phone'
   | 'number'
+  | 'currency'
   | 'radio'
   | 'checkbox'
   | 'select'
@@ -19,7 +20,8 @@ export type QuestionType =
   | 'slider'
   | 'hidden'
   | 'eircode'
-  | 'numberplate';
+  | 'numberplate'
+  | 'privacy_policy';
 
 export interface QuestionOption {
   id: string;
@@ -48,6 +50,8 @@ export interface Question {
   defaultValue?: string;
   options?: QuestionOption[]; // For radio, checkbox, select
   validation: QuestionValidation;
+  privacyPolicyUrl?: string; // URL for privacy policy link (for privacy_policy type)
+  privacyPolicyText?: string; // Text displayed next to the checkbox (for privacy_policy type)
   // Grid positioning
   gridColumn: number; // 1-12 grid system
   gridColumnSpan: number; // How many columns to span
@@ -124,6 +128,8 @@ export interface Step {
   defaultPrevStep?: string; // Default previous step ID
   // Validation
   validateOnContinue: boolean;
+  // Auto-advance for single question steps
+  autoAdvance?: boolean; // Automatically navigate to next step when question is answered
 }
 
 // ==================== Progress Bar ====================
@@ -239,6 +245,10 @@ export interface SubmissionConfig {
   errorMessage: string;
   redirectOnSuccess?: string;
   redirectOnError?: string;
+  // Success screen customization
+  successIcon?: string; // Emoji or icon for success screen
+  successBackgroundColor?: string; // Background color for success screen
+  successTextColor?: string; // Text color for success message
 }
 
 // ==================== Form ====================
