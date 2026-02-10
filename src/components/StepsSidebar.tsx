@@ -24,18 +24,42 @@ export function StepsSidebar({ onAddStep }: StepsSidebarProps) {
     }
   };
 
+  const handleMoveStep = (e: React.MouseEvent, index: number, direction: 'up' | 'down') => {
+    e.stopPropagation();
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= form.steps.length) return;
+
+    const newStepIds = form.steps.map(s => s.id);
+    const [removed] = newStepIds.splice(index, 1);
+    newStepIds.splice(targetIndex, 0, removed);
+
+    dispatch({ type: 'REORDER_STEPS', payload: { stepIds: newStepIds } });
+  };
+
   const handleDragStart = (e: React.DragEvent, index: number) => {
     e.dataTransfer.setData('text/plain', index.toString());
     e.dataTransfer.effectAllowed = 'move';
+    (e.currentTarget as HTMLElement).classList.add('dragging');
+  };
+
+  const handleDragEnd = (e: React.DragEvent) => {
+    (e.currentTarget as HTMLElement).classList.remove('dragging');
+    document.querySelectorAll('.step-item.drag-over').forEach(el => el.classList.remove('drag-over'));
   };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
+    (e.currentTarget as HTMLElement).classList.add('drag-over');
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    (e.currentTarget as HTMLElement).classList.remove('drag-over');
   };
 
   const handleDrop = (e: React.DragEvent, targetIndex: number) => {
     e.preventDefault();
+    (e.currentTarget as HTMLElement).classList.remove('drag-over');
     const sourceIndex = parseInt(e.dataTransfer.getData('text/plain'));
     if (sourceIndex === targetIndex) return;
 
@@ -63,7 +87,9 @@ export function StepsSidebar({ onAddStep }: StepsSidebarProps) {
             onClick={() => handleSelectStep(step.id)}
             draggable
             onDragStart={(e) => handleDragStart(e, index)}
+            onDragEnd={handleDragEnd}
             onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
             onDrop={(e) => handleDrop(e, index)}
           >
             <div className="step-item-content">
@@ -76,6 +102,22 @@ export function StepsSidebar({ onAddStep }: StepsSidebarProps) {
               </div>
             </div>
             <div className="step-actions">
+              <button
+                className="btn-icon btn-move"
+                onClick={(e) => handleMoveStep(e, index, 'up')}
+                title="Move Up"
+                disabled={index === 0}
+              >
+                ▲
+              </button>
+              <button
+                className="btn-icon btn-move"
+                onClick={(e) => handleMoveStep(e, index, 'down')}
+                title="Move Down"
+                disabled={index === form.steps.length - 1}
+              >
+                ▼
+              </button>
               <button
                 className="btn-icon btn-delete"
                 onClick={(e) => handleDeleteStep(e, step.id)}

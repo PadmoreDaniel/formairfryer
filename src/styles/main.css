@@ -348,13 +348,50 @@ body {
 
 .step-actions {
   display: flex;
-  gap: var(--spacing-xs);
+  gap: 2px;
   opacity: 0;
   transition: opacity var(--transition-fast);
 }
 
-.step-item:hover .step-actions {
+.step-item:hover .step-actions,
+.step-item.selected .step-actions {
   opacity: 1;
+}
+
+.btn-move {
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  color: var(--color-text-muted);
+  padding: 0;
+  transition: all var(--transition-fast);
+}
+
+.btn-move:hover:not(:disabled) {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+.btn-move:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.step-item.dragging {
+  opacity: 0.5;
+}
+
+.step-item.drag-over {
+  border-color: var(--color-primary) !important;
+  background: rgba(59, 130, 246, 0.08);
 }
 
 .btn-add-step {

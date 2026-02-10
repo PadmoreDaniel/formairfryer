@@ -142,11 +142,13 @@ class ${toPascalCase(pluginSettings.pluginSlug)}_Plugin {
     
     private function __construct() {
         add_action('init', array($this, 'init'));
-        add_action('wp_enqueue_scripts', array($this, 'enqueue_scripts'));
         add_action('admin_menu', array($this, 'add_admin_menu'));
         
         // Register shortcode
         add_shortcode('${pluginSettings.shortcode}', array($this, 'render_form_shortcode'));
+        
+        // Register scripts early (does NOT load them — just makes them available)
+        add_action('wp_enqueue_scripts', array($this, 'register_scripts'));
         
         // Initialize AJAX handler
         new ${toPascalCase(pluginSettings.pluginSlug)}_Ajax_Handler();
@@ -157,17 +159,27 @@ class ${toPascalCase(pluginSettings.pluginSlug)}_Plugin {
         load_plugin_textdomain('${pluginSettings.pluginSlug}', false, dirname(plugin_basename(__FILE__)) . '/languages');
     }
     
-    public function enqueue_scripts() {
-        // CSS is injected into Shadow DOM via JavaScript, not enqueued globally
-        // This prevents WordPress theme conflicts completely
-        
-        wp_enqueue_script(
+    /**
+     * Register scripts early but don't enqueue yet.
+     * This only tells WP about the script — it won't be loaded until wp_enqueue_script() is called.
+     */
+    public function register_scripts() {
+        wp_register_script(
             '${pluginSettings.pluginSlug}-handler',
             ${pluginSettings.pluginSlug.toUpperCase().replace(/-/g, '_')}_PLUGIN_URL . 'assets/js/form-handler.js',
             array('jquery'),
             ${pluginSettings.pluginSlug.toUpperCase().replace(/-/g, '_')}_VERSION . '.' . time(),
             true
         );
+    }
+    
+    /**
+     * Enqueue scripts and localize config data.
+     * Called from render_form_shortcode() — only runs on pages that actually use the shortcode.
+     * Since the script was registered with $in_footer = true, WordPress handles late enqueuing.
+     */
+    private function enqueue_form_scripts() {
+        wp_enqueue_script('${pluginSettings.pluginSlug}-handler');
         
         $form_config = $this->get_form_config();
         
@@ -199,7 +211,13 @@ class ${toPascalCase(pluginSettings.pluginSlug)}_Plugin {
         include ${pluginSettings.pluginSlug.toUpperCase().replace(/-/g, '_')}_PLUGIN_DIR . 'templates/admin-page.php';
     }
     
+    /**
+     * Shortcode handler — enqueues scripts only when the shortcode is actually rendered.
+     */
     public function render_form_shortcode($atts) {
+        // Enqueue scripts and config ONLY on pages that use this shortcode
+        $this->enqueue_form_scripts();
+        
         ob_start();
         include ${pluginSettings.pluginSlug.toUpperCase().replace(/-/g, '_')}_PLUGIN_DIR . 'templates/form-template.php';
         return ob_get_clean();
