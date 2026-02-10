@@ -114,6 +114,8 @@ export interface ButtonConfig {
 }
 
 // ==================== Step ====================
+export type ContentAlignment = 'left' | 'center' | 'right';
+
 export interface Step {
   id: string;
   title: string;
@@ -122,6 +124,8 @@ export interface Step {
   // Grid configuration
   gridColumns: number; // Number of columns (1-12)
   gridGap: number; // Gap in pixels
+  // Content alignment (title, description, buttons — not questions)
+  contentAlignment?: ContentAlignment;
   // Navigation
   backButton: ButtonConfig;
   continueButton: ButtonConfig;

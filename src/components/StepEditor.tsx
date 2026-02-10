@@ -191,6 +191,38 @@ export function StepEditor() {
         )}
       </div>
 
+      <div className="step-layout-config" style={{ marginBottom: '12px', padding: '12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
+        <h4 style={{ marginBottom: '8px', fontSize: '13px', fontWeight: 600 }}>📐 Content Alignment</h4>
+        <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginBottom: '8px' }}>Aligns title, description &amp; buttons (not questions)</p>
+        <div style={{ display: 'flex', gap: '4px' }}>
+          {(['left', 'center', 'right'] as const).map((align) => (
+            <button
+              key={align}
+              style={{
+                flex: 1,
+                padding: '6px 8px',
+                border: `1.5px solid ${(step.contentAlignment || 'left') === align ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                borderRadius: 'var(--radius-sm)',
+                background: (step.contentAlignment || 'left') === align ? 'rgba(4, 128, 128, 0.1)' : 'transparent',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: (step.contentAlignment || 'left') === align ? 600 : 400,
+                color: (step.contentAlignment || 'left') === align ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                textTransform: 'capitalize' as const,
+              }}
+              onClick={() =>
+                dispatch({
+                  type: 'UPDATE_STEP',
+                  payload: { stepId: step.id, updates: { contentAlignment: align } },
+                })
+              }
+            >
+              {align === 'left' ? '◧' : align === 'center' ? '◫' : '◨'} {align}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="step-navigation-config">
         <h4>⚙️ Step Navigation</h4>
         <div className="navigation-buttons">

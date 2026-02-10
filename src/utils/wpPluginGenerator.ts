@@ -130,11 +130,38 @@ export function generateThemeCSS(theme: Theme): string {
   font-weight: 600;
   margin: 0 0 calc(var(--wp-form-spacing-unit) * 2);
   color: var(--wp-form-text);
+  display: block !important;
 }
 
 .wp-form-step-description {
   color: var(--wp-form-text-muted);
   margin-bottom: var(--wp-form-section-gap);
+  display: block !important;
+}
+
+/* Step Content Alignment */
+.wp-form-step-align-center .wp-form-step-title,
+.wp-form-step-align-center .wp-form-step-description {
+  text-align: center !important;
+}
+.wp-form-step-align-center .wp-form-navigation {
+  justify-content: center !important;
+}
+.wp-form-step-align-center .wp-form-navigation .wp-form-btn-continue,
+.wp-form-step-align-center .wp-form-navigation .wp-form-btn-submit {
+  margin-left: 0 !important;
+}
+
+.wp-form-step-align-right .wp-form-step-title,
+.wp-form-step-align-right .wp-form-step-description {
+  text-align: right !important;
+}
+.wp-form-step-align-right .wp-form-navigation {
+  justify-content: flex-end !important;
+}
+.wp-form-step-align-right .wp-form-navigation .wp-form-btn-continue,
+.wp-form-step-align-right .wp-form-navigation .wp-form-btn-submit {
+  margin-left: 0 !important;
 }
 
 /* Questions Grid */
@@ -409,16 +436,19 @@ export function generateThemeCSS(theme: Theme): string {
   background-color: var(--wp-form-background);
 }
 
-.wp-form-btn-continue,
-.wp-form-btn-submit {
-  background-color: var(--wp-form-primary);
-  color: white;
+.wp-form .wp-form-btn.wp-form-btn-continue,
+.wp-form .wp-form-btn.wp-form-btn-submit {
+  background: ${theme.colors.primary} !important;
+  background-color: ${theme.colors.primary} !important;
+  color: #ffffff !important;
   margin-left: auto;
+  border: none !important;
 }
 
-.wp-form-btn-continue:hover,
-.wp-form-btn-submit:hover {
-  background-color: ${darkenColor(theme.colors.primary, 10)};
+.wp-form .wp-form-btn.wp-form-btn-continue:hover,
+.wp-form .wp-form-btn.wp-form-btn-submit:hover {
+  background: ${darkenColor(theme.colors.primary, 10)} !important;
+  background-color: ${darkenColor(theme.colors.primary, 10)} !important;
 }
 
 /* Success State */
@@ -966,7 +996,7 @@ $instance_id = '${escapePhpString(pluginSettings.pluginSlug)}-' . uniqid();
         <form class="wp-form-container" method="post">
             <?php wp_nonce_field('${escapePhpString(pluginSettings.pluginSlug)}_nonce', '${escapePhpString(pluginSettings.pluginSlug)}_nonce_field'); ?>
             
-            ${steps.map((step, index) => generateStepHTML(step, index, steps.length)).join('\n            ')}
+            ${steps.map((step, index) => generateStepHTML(step, index, steps.length, form.theme)).join('\n            ')}
             
         </form>
         
@@ -989,32 +1019,36 @@ $instance_id = '${escapePhpString(pluginSettings.pluginSlug)}-' . uniqid();
 `;
 }
 
-function generateStepHTML(step: Step, index: number, totalSteps: number): string {
+function generateStepHTML(step: Step, index: number, totalSteps: number, theme: Theme): string {
   const isFirst = index === 0;
   const isLast = index === totalSteps - 1;
   const stepTitle = escapePhpString(step.title);
   const stepDesc = escapePhpString(step.description || '');
   const backLabel = escapePhpString(step.backButton.label);
   const continueLabel = escapePhpString(isLast ? 'Submit' : step.continueButton.label);
+  const alignment = step.contentAlignment || 'left';
+  const alignClass = alignment !== 'left' ? ` wp-form-step-align-${alignment}` : '';
+  const titleInlineStyle = alignment !== 'left' ? ` style="text-align: ${alignment} !important; display: block !important;"` : '';
+  const descInlineStyle = alignment !== 'left' ? ` style="text-align: ${alignment} !important; display: block !important;"` : '';
   
   return `
-        <div class="wp-form-step" data-step="${index}" data-step-id="${escapePhpString(step.id)}" ${index > 0 ? 'style="display: none;"' : ''}>
-            <h2 class="wp-form-step-title"><?php echo esc_html('${stepTitle}'); ?></h2>
-            ${step.description ? `<p class="wp-form-step-description"><?php echo esc_html('${stepDesc}'); ?></p>` : ''}
+        <div class="wp-form-step${alignClass}" data-step="${index}" data-step-id="${escapePhpString(step.id)}" ${index > 0 ? 'style="display: none;"' : ''}>
+            <h2 class="wp-form-step-title"${titleInlineStyle}><?php echo esc_html('${stepTitle}'); ?></h2>
+            ${step.description ? `<p class="wp-form-step-description"${descInlineStyle}><?php echo esc_html('${stepDesc}'); ?></p>` : ''}
             
             <div class="wp-form-questions" style="grid-template-columns: repeat(${step.gridColumns}, 1fr); gap: ${step.gridGap}px;">
                 ${step.questions.map(q => generateQuestionHTML(q, step.gridColumns)).join('\n                ')}
             </div>
             
-            <div class="wp-form-navigation">
+            <div class="wp-form-navigation"${alignment === 'center' ? ' style="justify-content: center !important;"' : alignment === 'right' ? ' style="justify-content: flex-end !important;"' : ''}>
                 ${step.backButton.enabled && !isFirst ? `
                 <button type="button" class="wp-form-btn wp-form-btn-back" data-action="back">
                     <?php echo esc_html('${backLabel}'); ?>
                 </button>
-                ` : '<div></div>'}
+                ` : (alignment !== 'center' && alignment !== 'right' ? '<div></div>' : '')}
                 
                 ${step.continueButton.enabled ? `
-                <button type="button" class="wp-form-btn ${isLast ? 'wp-form-btn-submit' : 'wp-form-btn-continue'}" data-action="${isLast ? 'submit' : 'continue'}">
+                <button type="button" class="wp-form-btn ${isLast ? 'wp-form-btn-submit' : 'wp-form-btn-continue'}" data-action="${isLast ? 'submit' : 'continue'}" style="background: ${theme.colors.primary} !important; background-color: ${theme.colors.primary} !important; color: #ffffff !important; border: none !important;${alignment !== 'left' ? ' margin-left: 0 !important;' : ''}">
                     <?php echo esc_html('${continueLabel}'); ?>
                 </button>
                 ` : ''}

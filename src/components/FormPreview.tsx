@@ -496,12 +496,13 @@ export function FormPreview() {
                     style={{
                       fontFamily: theme.typography.headingFontFamily,
                       color: theme.colors.text,
+                      textAlign: (currentStep.contentAlignment as any) || 'left',
                     }}
                   >
                     {currentStep.title}
                   </h2>
                   {currentStep.description && (
-                    <p className="step-description" style={{ color: theme.colors.textMuted }}>
+                    <p className="step-description" style={{ color: theme.colors.textMuted, textAlign: (currentStep.contentAlignment as any) || 'left' }}>
                       {currentStep.description}
                     </p>
                   )}
@@ -539,7 +540,11 @@ export function FormPreview() {
                 </div>
 
                 {/* Navigation Buttons */}
-                <div className="preview-navigation">
+                <div className="preview-navigation" style={{
+                  justifyContent: currentStep.contentAlignment === 'center' ? 'center'
+                    : currentStep.contentAlignment === 'right' ? 'flex-end'
+                    : undefined,
+                }}>
                   {currentStep.backButton.enabled && !isFirstStep ? (
                     <button
                       className="btn-back"
