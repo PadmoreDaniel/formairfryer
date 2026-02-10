@@ -104,6 +104,17 @@ export function QuestionEditor() {
           />
         </div>
 
+        <div className="form-group checkbox-group">
+          <label className="toggle-label">
+            <input
+              type="checkbox"
+              checked={selectedQuestion.hideLabel || false}
+              onChange={(e) => updateQuestion({ hideLabel: e.target.checked })}
+            />
+            <span className="toggle-text">Hide label (label still required for accessibility)</span>
+          </label>
+        </div>
+
         <div className="form-group">
           <label>Field Name (for form submission)</label>
           <input
@@ -136,6 +147,22 @@ export function QuestionEditor() {
             placeholder="Additional instructions for the user..."
           />
         </div>
+
+        {['date', 'datetime'].includes(selectedQuestion.type) && (
+          <div className="form-group checkbox-group">
+            <label className="toggle-label">
+              <input
+                type="checkbox"
+                checked={selectedQuestion.useDateInputMask || false}
+                onChange={(e) => updateQuestion({ useDateInputMask: e.target.checked })}
+              />
+              <span className="toggle-text">Use text input with mask (better for mobile)</span>
+            </label>
+            <span className="form-hint" style={{ display: 'block', marginTop: '4px' }}>
+              Replaces date picker with a text field using input mask (e.g., DD/MM/YYYY)
+            </span>
+          </div>
+        )}
 
         {selectedQuestion.type === 'hidden' && (
           <div className="form-group">

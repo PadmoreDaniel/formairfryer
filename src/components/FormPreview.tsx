@@ -363,6 +363,17 @@ export function FormPreview() {
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Handle Enter key press
+    if (e.key === 'Enter' && !(e.target as HTMLElement).matches('textarea')) {
+      // Check if enter key advance is enabled for this step
+      if (currentStep.enterKeyAdvance) {
+        e.preventDefault();
+        handleContinue();
+      }
+    }
+  };
+
   const resetPreview = () => {
     setCurrentStepIndex(0);
     setFormData({});
@@ -519,6 +530,7 @@ export function FormPreview() {
                             value={formData[question.fieldName || question.id] || ''}
                             error={errors[question.fieldName || question.id]}
                             onChange={(value) => handleInputChange(question, value)}
+                            onKeyDown={handleKeyDown}
                             theme={theme}
                           />
                         </div>
@@ -595,12 +607,14 @@ function QuestionField({
   value,
   error,
   onChange,
+  onKeyDown,
   theme,
 }: {
   question: Question;
   value: any;
   error?: string;
   onChange: (value: any) => void;
+  onKeyDown?: (e: React.KeyboardEvent) => void;
   theme: any;
 }) {
   const inputStyle = {
@@ -620,6 +634,7 @@ function QuestionField({
             type={question.type === 'email' ? 'email' : question.type === 'phone' ? 'tel' : 'text'}
             value={value}
             onChange={(e) => onChange(e.target.value)}
+            onKeyDown={onKeyDown}
             placeholder={question.placeholder}
             style={inputStyle}
           />
@@ -631,6 +646,7 @@ function QuestionField({
             type="number"
             value={value}
             onChange={(e) => onChange(e.target.value)}
+            onKeyDown={onKeyDown}
             placeholder={question.placeholder}
             min={question.validation.min}
             max={question.validation.max}
@@ -659,6 +675,7 @@ function QuestionField({
               type="number"
               value={value}
               onChange={(e) => onChange(e.target.value)}
+              onKeyDown={onKeyDown}
               placeholder={question.placeholder || '0.00'}
               min={question.validation.min}
               max={question.validation.max}
@@ -687,13 +704,14 @@ function QuestionField({
         return (
           <div className="radio-group">
             {question.options?.map((option) => (
-              <label key={option.id} className="radio-option">
+              <label key={option.id} className="radio-option" style={{ border: `${theme.borders.width}px ${theme.borders.style} ${value === option.value ? theme.colors.primary : theme.colors.border}` }}>
                 <input
                   type="radio"
                   name={question.id}
                   value={option.value}
                   checked={value === option.value}
                   onChange={(e) => onChange(e.target.value)}
+                  style={{ border: `${theme.borders.width}px solid ${value === option.value ? theme.colors.primary : theme.colors.border}` }}
                 />
                 <span>{option.label}</span>
               </label>
@@ -704,24 +722,28 @@ function QuestionField({
       case 'checkbox':
         return (
           <div className="checkbox-group">
-            {question.options?.map((option) => (
-              <label key={option.id} className="checkbox-option">
-                <input
-                  type="checkbox"
-                  value={option.value}
-                  checked={Array.isArray(value) && value.includes(option.value)}
-                  onChange={(e) => {
-                    const currentValues = Array.isArray(value) ? value : [];
-                    if (e.target.checked) {
-                      onChange([...currentValues, option.value]);
-                    } else {
-                      onChange(currentValues.filter((v: string) => v !== option.value));
-                    }
-                  }}
-                />
-                <span>{option.label}</span>
-              </label>
-            ))}
+            {question.options?.map((option) => {
+              const isChecked = Array.isArray(value) && value.includes(option.value);
+              return (
+                <label key={option.id} className="checkbox-option" style={{ border: `${theme.borders.width}px ${theme.borders.style} ${isChecked ? theme.colors.primary : theme.colors.border}` }}>
+                  <input
+                    type="checkbox"
+                    value={option.value}
+                    checked={isChecked}
+                    onChange={(e) => {
+                      const currentValues = Array.isArray(value) ? value : [];
+                      if (e.target.checked) {
+                        onChange([...currentValues, option.value]);
+                      } else {
+                        onChange(currentValues.filter((v: string) => v !== option.value));
+                      }
+                    }}
+                    style={{ border: `${theme.borders.width}px solid ${isChecked ? theme.colors.primary : theme.colors.border}` }}
+                  />
+                  <span>{option.label}</span>
+                </label>
+              );
+            })}
           </div>
         );
       
@@ -730,6 +752,7 @@ function QuestionField({
           <select
             value={value}
             onChange={(e) => onChange(e.target.value)}
+            onKeyDown={onKeyDown}
             style={inputStyle}
           >
             <option value="">{question.placeholder || 'Select...'}</option>
@@ -742,11 +765,75 @@ function QuestionField({
         );
       
       case 'date':
+        if (question.useDateInputMask) {
+          return (
+            <input
+              type="text"
+              value={value}
+              onChange={(e) => {
+                // Format as DD/MM/YYYY
+                let v = e.target.value.replace(/\D/g, '');
+                if (v.length >= 2) {
+                  v = v.substring(0, 2) + '/' + v.substring(2);
+                }
+                if (v.length >= 5) {
+                  v = v.substring(0, 5) + '/' + v.substring(5, 9);
+                }
+                onChange(v);
+              }}
+              onKeyDown={onKeyDown}
+              placeholder={question.placeholder || 'DD/MM/YYYY'}
+              maxLength={10}
+              style={inputStyle}
+            />
+          );
+        }
         return (
           <input
             type="date"
             value={value}
             onChange={(e) => onChange(e.target.value)}
+            onKeyDown={onKeyDown}
+            style={inputStyle}
+          />
+        );
+      
+      case 'datetime':
+        if (question.useDateInputMask) {
+          return (
+            <input
+              type="text"
+              value={value}
+              onChange={(e) => {
+                // Format as DD/MM/YYYY HH:MM
+                let v = e.target.value.replace(/\D/g, '');
+                if (v.length >= 2) {
+                  v = v.substring(0, 2) + '/' + v.substring(2);
+                }
+                if (v.length >= 5) {
+                  v = v.substring(0, 5) + '/' + v.substring(5);
+                }
+                if (v.length >= 10) {
+                  v = v.substring(0, 10) + ' ' + v.substring(10);
+                }
+                if (v.length >= 13) {
+                  v = v.substring(0, 13) + ':' + v.substring(13, 15);
+                }
+                onChange(v);
+              }}
+              onKeyDown={onKeyDown}
+              placeholder={question.placeholder || 'DD/MM/YYYY HH:MM'}
+              maxLength={16}
+              style={inputStyle}
+            />
+          );
+        }
+        return (
+          <input
+            type="datetime-local"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={onKeyDown}
             style={inputStyle}
           />
         );
@@ -757,16 +844,7 @@ function QuestionField({
             type="time"
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            style={inputStyle}
-          />
-        );
-      
-      case 'datetime':
-        return (
-          <input
-            type="datetime-local"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={onKeyDown}
             style={inputStyle}
           />
         );
@@ -790,7 +868,7 @@ function QuestionField({
           </div>
         );
       
-      case 'slider':
+      case 'slider': {
         const sliderMin = question.validation.min || 0;
         const sliderMax = question.validation.max || 100;
         const sliderValue = value || sliderMin;
@@ -813,6 +891,7 @@ function QuestionField({
             </span>
           </div>
         );
+      }
       
       case 'file':
         return (
@@ -850,7 +929,7 @@ function QuestionField({
           </div>
         );
       
-      case 'eircode':
+      case 'eircode': {
         const eircodeValue = String(value || '');
         const eircodePrefix = eircodeValue.substring(0, 3).replace(/\s/g, '').toUpperCase();
         const validPrefixes = ['A41','A42','A45','A63','A67','A75','A81','A82','A83','A84','A85','A86','A91','A92','A94','A96','A98','C15','D01','D02','D03','D04','D05','D06','D6W','D07','D08','D09','D10','D11','D12','D13','D14','D15','D16','D17','D18','D20','D22','D24','E21','E25','E32','E34','E41','E45','E53','E91','F12','F23','F26','F28','F31','F35','F42','F45','F52','F56','F91','F92','F93','F94','H12','H14','H16','H18','H23','H53','H54','H62','H65','H71','H91','K32','K34','K36','K45','K56','K67','K78','N37','N39','N41','N91','P12','P14','P17','P24','P25','P31','P32','P36','P43','P47','P51','P56','P61','P67','P72','P75','P81','P85','R14','R21','R32','R35','R42','R45','R51','R56','R93','R95','T12','T23','T34','T45','T56','V14','V15','V23','V31','V35','V42','V92','V93','V94','V95','W12','W23','W34','W91','X35','X42','X91','Y14','Y21','Y25','Y34','Y35'];
@@ -869,6 +948,7 @@ function QuestionField({
                 }
                 onChange(val.trim());
               }}
+              onKeyDown={onKeyDown}
               placeholder={question.placeholder || 'e.g. D02 X285'}
               maxLength={8}
               style={{ ...inputStyle, textTransform: 'uppercase' }}
@@ -885,6 +965,7 @@ function QuestionField({
             )}
           </>
         );
+      }
       
       case 'numberplate':
         return (
@@ -895,7 +976,7 @@ function QuestionField({
               className="input-adornment input-adornment-start"
               style={{
                 position: 'absolute',
-                left: '8px',
+                left: '12px',
                 height: '36px',
                 width: 'auto',
                 zIndex: 1,
@@ -925,29 +1006,31 @@ function QuestionField({
                 if (seq) result += '-' + seq;
                 onChange(result);
               }}
+              onKeyDown={onKeyDown}
               placeholder={question.placeholder || 'e.g. 191-D-12345'}
               maxLength={12}
               style={{ 
                 ...inputStyle, 
                 textTransform: 'uppercase',
-                paddingLeft: '40px',
+                paddingLeft: '56px',
                 width: '100%'
               }}
             />
           </div>
         );
       
-      case 'privacy_policy':
+      case 'privacy_policy': {
         const policyUrl = question.privacyPolicyUrl || '#';
         const policyText = question.privacyPolicyText || 'I agree to the';
+        const privacyChecked = value === true || value === 'true' || value === 'accepted';
         return (
           <div className="privacy-policy-field">
-            <label className="checkbox-option" style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer' }}>
+            <label className="checkbox-option" style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', border: `${theme.borders.width}px ${theme.borders.style} ${privacyChecked ? theme.colors.primary : theme.colors.border}` }}>
               <input
                 type="checkbox"
-                checked={value === true || value === 'true' || value === 'accepted'}
+                checked={privacyChecked}
                 onChange={(e) => onChange(e.target.checked ? 'accepted' : '')}
-                style={{ marginTop: '3px' }}
+                style={{ border: `${theme.borders.width}px solid ${privacyChecked ? theme.colors.primary : theme.colors.border}` }}
               />
               <span>
                 {policyText}{' '}
@@ -964,6 +1047,7 @@ function QuestionField({
             </label>
           </div>
         );
+      }
       
       default:
         return <input type="text" value={value} onChange={(e) => onChange(e.target.value)} style={inputStyle} />;
@@ -972,10 +1056,12 @@ function QuestionField({
 
   return (
     <div className={`question-field ${error ? 'has-error' : ''}`}>
-      <label className="question-label" style={{ color: theme.colors.text }}>
-        {question.label}
-        {question.validation.required && <span className="required-star">*</span>}
-      </label>
+      {!question.hideLabel && (
+        <label className="question-label" style={{ color: theme.colors.text }}>
+          {question.label}
+          {question.validation.required && <span className="required-star">*</span>}
+        </label>
+      )}
       {renderField()}
       {question.helpText && (
         <span className="help-text" style={{ color: theme.colors.textMuted }}>

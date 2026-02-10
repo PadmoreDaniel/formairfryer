@@ -217,7 +217,7 @@ export function generateThemeCSS(theme: Theme): string {
   cursor: pointer;
   padding: calc(var(--wp-form-spacing-unit) * 2);
   background: var(--wp-form-surface);
-  border: 2px solid var(--wp-form-border);
+  border: var(--wp-form-border-width) var(--wp-form-border-style) var(--wp-form-border);
   border-radius: calc(var(--wp-form-border-radius) * 0.75);
   transition: all 0.2s ease;
   position: relative;
@@ -231,61 +231,81 @@ export function generateThemeCSS(theme: Theme): string {
 .wp-form-option.selected,
 .wp-form-option:has(input:checked) {
   border-color: var(--wp-form-primary);
-  background: color-mix(in srgb, var(--wp-form-primary) 5%, var(--wp-form-background));
+  background: rgba(
+    ${parseInt(theme.colors.primary.slice(1, 3), 16)}, 
+    ${parseInt(theme.colors.primary.slice(3, 5), 16)}, 
+    ${parseInt(theme.colors.primary.slice(5, 7), 16)}, 
+    0.05
+  ) !important;
   box-shadow: 0 0 0 1px var(--wp-form-primary);
 }
 
 .wp-form-option input[type="checkbox"],
 .wp-form-option input[type="radio"] {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 22px;
-  height: 22px;
-  border: 2px solid var(--wp-form-border);
-  background: var(--wp-form-background);
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  min-height: 22px !important;
+  max-width: 22px !important;
+  max-height: 22px !important;
+  border: var(--wp-form-border-width) var(--wp-form-border-style) var(--wp-form-border) !important;
+  background: var(--wp-form-background) !important;
+  background-color: var(--wp-form-background) !important;
   cursor: pointer;
-  flex-shrink: 0;
-  margin: 0;
+  flex-shrink: 0 !important;
+  flex-grow: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
   position: relative;
   transition: all 0.2s ease;
+  display: inline-block !important;
+  vertical-align: middle;
 }
 
 .wp-form-option input[type="radio"] {
-  border-radius: 50%;
+  border-radius: 50% !important;
 }
 
 .wp-form-option input[type="checkbox"] {
-  border-radius: 4px;
+  border-radius: 4px !important;
 }
 
 .wp-form-option input[type="checkbox"]:checked,
 .wp-form-option input[type="radio"]:checked {
-  background: var(--wp-form-primary);
-  border-color: var(--wp-form-primary);
+  background: var(--wp-form-primary) !important;
+  background-color: var(--wp-form-primary) !important;
+  border-color: var(--wp-form-primary) !important;
 }
 
 .wp-form-option input[type="checkbox"]:checked::after {
-  content: '';
-  position: absolute;
-  left: 6px;
-  top: 2px;
-  width: 5px;
-  height: 10px;
-  border: solid white;
-  border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
+  content: '' !important;
+  position: absolute !important;
+  left: 6px !important;
+  top: 2px !important;
+  width: 5px !important;
+  height: 10px !important;
+  border: solid white !important;
+  border-width: 0 2px 2px 0 !important;
+  transform: rotate(45deg) !important;
+  display: block !important;
 }
 
 .wp-form-option input[type="radio"]:checked::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 8px;
-  height: 8px;
-  background: white;
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
+  content: '' !important;
+  position: absolute !important;
+  left: 50% !important;
+  top: 50% !important;
+  width: 8px !important;
+  height: 8px !important;
+  background: white !important;
+  background-color: white !important;
+  border-radius: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  display: block !important;
+}
 }
 
 .wp-form-option-label {
@@ -738,7 +758,7 @@ export function generateThemeCSS(theme: Theme): string {
 /* Number Plate Field */
 .wp-form-numberplate-input {
   text-transform: uppercase;
-  padding-left: 40px !important;
+  padding-left: 56px !important;
 }
 
 /* Input with Adornment */
@@ -762,7 +782,7 @@ export function generateThemeCSS(theme: Theme): string {
 }
 
 .wp-form-numberplate-icon {
-  left: 8px;
+  left: 12px;
   height: 40px;
   width: auto;
 }
@@ -783,17 +803,77 @@ export function generateThemeCSS(theme: Theme): string {
 
 .wp-form-privacy-label {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  align-items: center;
+  gap: calc(var(--wp-form-spacing-unit) * 1.5);
   cursor: pointer;
+  padding: calc(var(--wp-form-spacing-unit) * 2);
+  background: var(--wp-form-surface);
+  border: var(--wp-form-border-width) var(--wp-form-border-style) var(--wp-form-border);
+  border-radius: calc(var(--wp-form-border-radius) * 0.75);
+  transition: all 0.2s ease;
   font-size: ${theme.inputs.fontSize}px;
   line-height: 1.5;
 }
 
+.wp-form-privacy-label:hover {
+  border-color: var(--wp-form-primary);
+  background: var(--wp-form-background);
+}
+
+.wp-form-privacy-label.selected,
+.wp-form-privacy-label:has(input:checked) {
+  border-color: var(--wp-form-primary);
+  background: rgba(
+    ${parseInt(theme.colors.primary.slice(1, 3), 16)}, 
+    ${parseInt(theme.colors.primary.slice(3, 5), 16)}, 
+    ${parseInt(theme.colors.primary.slice(5, 7), 16)}, 
+    0.05
+  ) !important;
+  box-shadow: 0 0 0 1px var(--wp-form-primary);
+}
+
 .wp-form-privacy-checkbox {
-  margin-top: 3px;
-  width: auto !important;
-  flex-shrink: 0;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  min-height: 22px !important;
+  max-width: 22px !important;
+  max-height: 22px !important;
+  border: var(--wp-form-border-width) var(--wp-form-border-style) var(--wp-form-border) !important;
+  background: var(--wp-form-background) !important;
+  background-color: var(--wp-form-background) !important;
+  border-radius: 4px !important;
+  cursor: pointer;
+  flex-shrink: 0 !important;
+  flex-grow: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  position: relative;
+  transition: all 0.2s ease;
+  display: inline-block !important;
+  vertical-align: middle;
+}
+
+.wp-form-privacy-checkbox:checked {
+  background: var(--wp-form-primary) !important;
+  background-color: var(--wp-form-primary) !important;
+  border-color: var(--wp-form-primary) !important;
+}
+
+.wp-form-privacy-checkbox:checked::after {
+  content: '' !important;
+  position: absolute !important;
+  left: 6px !important;
+  top: 2px !important;
+  width: 5px !important;
+  height: 10px !important;
+  border: solid white !important;
+  border-width: 0 2px 2px 0 !important;
+  transform: rotate(45deg) !important;
+  display: block !important;
 }
 
 .wp-form-privacy-link {
@@ -953,6 +1033,7 @@ function generateQuestionHTML(question: Question, gridColumns: number): string {
   const label = escapePhpString(question.label);
   const helpText = escapePhpString(question.helpText || '');
   const defaultVal = escapePhpString(question.defaultValue || '');
+  const hideLabel = question.hideLabel || false;
   
   let inputHTML = '';
   
@@ -1017,11 +1098,37 @@ function generateQuestionHTML(question: Question, gridColumns: number): string {
       break;
     
     case 'date':
-      inputHTML = `<input type="date" class="wp-form-field-input" name="${fieldName}" id="${questionId}" ${required ? 'required' : ''}>`;
+      if (question.useDateInputMask) {
+        inputHTML = `<input type="text" 
+                      class="wp-form-field-input wp-form-date-mask-input" 
+                      name="${fieldName}" 
+                      id="${questionId}"
+                      placeholder="<?php echo esc_attr('${placeholder || 'DD/MM/YYYY'}'); ?>"
+                      maxlength="10"
+                      data-format="date"
+                      ${required ? 'required' : ''}>`;
+      } else {
+        inputHTML = `<input type="date" class="wp-form-field-input" name="${fieldName}" id="${questionId}" ${required ? 'required' : ''}>`;
+      }
       break;
     
     case 'time':
       inputHTML = `<input type="time" class="wp-form-field-input" name="${fieldName}" id="${questionId}" ${required ? 'required' : ''}>`;
+      break;
+    
+    case 'datetime':
+      if (question.useDateInputMask) {
+        inputHTML = `<input type="text" 
+                      class="wp-form-field-input wp-form-date-mask-input" 
+                      name="${fieldName}" 
+                      id="${questionId}"
+                      placeholder="<?php echo esc_attr('${placeholder || 'DD/MM/YYYY HH:MM'}'); ?>"
+                      maxlength="16"
+                      data-format="datetime"
+                      ${required ? 'required' : ''}>`;
+      } else {
+        inputHTML = `<input type="datetime-local" class="wp-form-field-input" name="${fieldName}" id="${questionId}" ${required ? 'required' : ''}>`;
+      }
       break;
     
     case 'rating':
@@ -1113,10 +1220,10 @@ function generateQuestionHTML(question: Question, gridColumns: number): string {
   
   return `
                 <div class="wp-form-field" style="${style}" data-question-id="${questionId}" ${question.conditionalDisplay ? `data-conditional='${JSON.stringify(question.conditionalDisplay).replace(/'/g, "&#39;")}'` : ''}>
-                    <label class="wp-form-field-label" for="${questionId}">
+                    ${!hideLabel ? `<label class="wp-form-field-label" for="${questionId}">
                         <?php echo esc_html('${label}'); ?>
                         ${required ? '<span class="wp-form-field-required">*</span>' : ''}
-                    </label>
+                    </label>` : ''}
                     ${inputHTML}
                     ${question.helpText ? `<span class="wp-form-field-help"><?php echo esc_html('${helpText}'); ?></span>` : ''}
                     <span class="wp-form-field-error" style="display: none;"></span>
@@ -1277,6 +1384,38 @@ export function generateFormJS(form: Form): string {
                 self.checkAutoNavigation();
             });
             
+            // Checkbox and Radio styling - add 'selected' class for browser compatibility
+            this.form.on('change', 'input[type="checkbox"], input[type="radio"]', function() {
+                const $input = $(this);
+                const $option = $input.closest('.wp-form-option');
+                const $privacyLabel = $input.closest('.wp-form-privacy-label');
+                
+                if ($privacyLabel.length) {
+                    // Privacy policy checkbox
+                    $privacyLabel.toggleClass('selected', $input.is(':checked'));
+                } else if ($input.is(':radio')) {
+                    // Radio: remove selected from siblings, add to this one
+                    $input.closest('.wp-form-options').find('.wp-form-option').removeClass('selected');
+                    if ($input.is(':checked')) {
+                        $option.addClass('selected');
+                    }
+                } else {
+                    // Checkbox: toggle selected class
+                    $option.toggleClass('selected', $input.is(':checked'));
+                }
+            });
+            
+            // Initialize selected state for pre-checked inputs
+            this.form.find('input[type="checkbox"]:checked, input[type="radio"]:checked').each(function() {
+                const $option = $(this).closest('.wp-form-option');
+                const $privacyLabel = $(this).closest('.wp-form-privacy-label');
+                if ($privacyLabel.length) {
+                    $privacyLabel.addClass('selected');
+                } else {
+                    $option.addClass('selected');
+                }
+            });
+            
             // Rating stars
             this.form.on('click', '.wp-form-rating-star', function() {
                 const rating = $(this).closest('.wp-form-rating');
@@ -1323,6 +1462,30 @@ export function generateFormJS(form: Form): string {
             this.form.on('input', '.wp-form-numberplate-input', function() {
                 const formatted = self.formatNumberPlate($(this).val());
                 $(this).val(formatted);
+            });
+            
+            // Date mask input formatting
+            this.form.on('input', '.wp-form-date-mask-input', function() {
+                const format = $(this).data('format');
+                const formatted = self.formatDateMask($(this).val(), format);
+                $(this).val(formatted);
+            });
+            
+            // Enter key handling for single-question steps
+            this.form.on('keypress', 'input, textarea, select', function(e) {
+                if (e.which === 13 && !$(this).is('textarea')) { // Enter key, but not in textareas
+                    e.preventDefault();
+                    
+                    const step = self.steps.eq(self.currentStep);
+                    const stepId = step.data('step-id');
+                    const stepConfig = stepsConfig.find(s => s.id === stepId);
+                    
+                    // Check if enter key advance is enabled for this step
+                    if (stepConfig && stepConfig.enterKeyAdvance) {
+                        log('Enter key pressed - advancing step');
+                        self.nextStep();
+                    }
+                }
             });
         }
         
@@ -1394,6 +1557,40 @@ export function generateFormJS(form: Form): string {
         isValidNumberPlate(value) {
             // Pattern: 2-3 digits, dash, 1-2 letters, dash, 1-6 digits
             return /^\\d{2,3}-[A-Z]{1,2}-\\d{1,6}$/.test(value);
+        }
+        
+        // Format date input mask
+        formatDateMask(value, format) {
+            // Remove all non-digit characters
+            let cleaned = value.replace(/\\D/g, '');
+            
+            if (format === 'date') {
+                // Format as DD/MM/YYYY
+                if (cleaned.length >= 2) {
+                    cleaned = cleaned.substring(0, 2) + '/' + cleaned.substring(2);
+                }
+                if (cleaned.length >= 5) {
+                    cleaned = cleaned.substring(0, 5) + '/' + cleaned.substring(5, 9);
+                }
+                return cleaned;
+            } else if (format === 'datetime') {
+                // Format as DD/MM/YYYY HH:MM
+                if (cleaned.length >= 2) {
+                    cleaned = cleaned.substring(0, 2) + '/' + cleaned.substring(2);
+                }
+                if (cleaned.length >= 5) {
+                    cleaned = cleaned.substring(0, 5) + '/' + cleaned.substring(5);
+                }
+                if (cleaned.length >= 10) {
+                    cleaned = cleaned.substring(0, 10) + ' ' + cleaned.substring(10);
+                }
+                if (cleaned.length >= 13) {
+                    cleaned = cleaned.substring(0, 13) + ':' + cleaned.substring(13, 15);
+                }
+                return cleaned;
+            }
+            
+            return cleaned;
         }
         
         collectData() {
@@ -1569,6 +1766,16 @@ export function generateFormJS(form: Form): string {
                     }
                 }
                 
+                // Phone validation
+                if ($input.attr('type') === 'tel' && value) {
+                    const phoneRegex = /^[\\d\\s\\+\\-\\(\\)]+$/;
+                    if (!phoneRegex.test(value) || value.replace(/\\D/g, '').length < 7) {
+                        $field.addClass('has-error');
+                        $field.find('.wp-form-field-error').text('Please enter a valid phone number').show();
+                        isValid = false;
+                    }
+                }
+                
                 // Eircode validation
                 if ($input.hasClass('wp-form-eircode-input') && value) {
                     const prefix = value.substring(0, 3).replace(/\\s/g, '');
@@ -1591,15 +1798,19 @@ export function generateFormJS(form: Form): string {
             
             log('After validation loop, isValid =', isValid);
             
-            // Scroll to first error
-            if (!isValid) {
-                log('Validation FAILED - blocking navigation');
+            // Scroll to first error - only if scrollOnError is not explicitly disabled
+            const scrollOnError = stepConfig ? (stepConfig.scrollOnError !== false) : true; // Default to true if not specified
+            
+            if (!isValid && scrollOnError) {
+                log('Validation FAILED - scrolling to error');
                 const firstError = step.find('.has-error').first();
                 if (firstError.length) {
                     $('html, body').animate({
                         scrollTop: firstError.offset().top - 100
                     }, 300);
                 }
+            } else if (!isValid) {
+                log('Validation FAILED - scroll disabled for this step');
             }
             
             log('Validation result returning:', isValid);

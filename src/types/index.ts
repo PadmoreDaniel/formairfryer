@@ -44,6 +44,7 @@ export interface Question {
   id: string;
   type: QuestionType;
   label: string;
+  hideLabel?: boolean; // Option to hide label even if label text exists
   fieldName?: string; // Custom field name for form output (defaults to id if not set)
   placeholder?: string;
   helpText?: string;
@@ -52,6 +53,7 @@ export interface Question {
   validation: QuestionValidation;
   privacyPolicyUrl?: string; // URL for privacy policy link (for privacy_policy type)
   privacyPolicyText?: string; // Text displayed next to the checkbox (for privacy_policy type)
+  useDateInputMask?: boolean; // For date fields: use text input with mask instead of date picker (better for mobile)
   // Grid positioning
   gridColumn: number; // 1-12 grid system
   gridColumnSpan: number; // How many columns to span
@@ -128,8 +130,10 @@ export interface Step {
   defaultPrevStep?: string; // Default previous step ID
   // Validation
   validateOnContinue: boolean;
+  scrollOnError?: boolean; // Scroll to first error on validation failure (default: true)
   // Auto-advance for single question steps
   autoAdvance?: boolean; // Automatically navigate to next step when question is answered
+  enterKeyAdvance?: boolean; // Allow Enter key to advance to next step in single question steps
 }
 
 // ==================== Progress Bar ====================

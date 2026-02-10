@@ -222,6 +222,54 @@ export function StepEditor() {
             <label>
               <input
                 type="checkbox"
+                checked={step.enterKeyAdvance || false}
+                onChange={(e) =>
+                  dispatch({
+                    type: 'UPDATE_STEP',
+                    payload: {
+                      stepId: step.id,
+                      updates: { enterKeyAdvance: e.target.checked },
+                    },
+                  })
+                }
+              />
+              Allow Enter key to advance step
+            </label>
+            {step.enterKeyAdvance && (
+              <span className="help-text" style={{ display: 'block', fontSize: '0.8em', color: '#666', marginTop: '4px' }}>
+                Pressing Enter while in an input field will advance to the next step.
+              </span>
+            )}
+          </div>
+          
+          <div className="nav-button-config">
+            <label>
+              <input
+                type="checkbox"
+                checked={step.scrollOnError !== false}
+                onChange={(e) =>
+                  dispatch({
+                    type: 'UPDATE_STEP',
+                    payload: {
+                      stepId: step.id,
+                      updates: { scrollOnError: e.target.checked },
+                    },
+                  })
+                }
+              />
+              Scroll to first error on validation failure
+            </label>
+            {step.scrollOnError === false && (
+              <span className="help-text" style={{ display: 'block', fontSize: '0.8em', color: '#666', marginTop: '4px' }}>
+                Automatic scrolling to errors is disabled for this step.
+              </span>
+            )}
+          </div>
+          
+          <div className="nav-button-config">
+            <label>
+              <input
+                type="checkbox"
                 checked={step.backButton.enabled}
                 onChange={(e) =>
                   dispatch({
