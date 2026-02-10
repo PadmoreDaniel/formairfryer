@@ -21,7 +21,8 @@ export type QuestionType =
   | 'hidden'
   | 'eircode'
   | 'numberplate'
-  | 'privacy_policy';
+  | 'privacy_policy'
+  | 'helper_text';
 
 export interface QuestionOption {
   id: string;
@@ -54,6 +55,8 @@ export interface Question {
   privacyPolicyUrl?: string; // URL for privacy policy link (for privacy_policy type)
   privacyPolicyText?: string; // Text displayed next to the checkbox (for privacy_policy type)
   useDateInputMask?: boolean; // For date fields: use text input with mask instead of date picker (better for mobile)
+  textAlignment?: 'left' | 'center' | 'right'; // For helper_text type: text alignment
+  helperContent?: string; // For helper_text type: the display text content
   // Grid positioning
   gridColumn: number; // 1-12 grid system
   gridColumnSpan: number; // How many columns to span
@@ -116,6 +119,17 @@ export interface ButtonConfig {
 // ==================== Step ====================
 export type ContentAlignment = 'left' | 'center' | 'right';
 
+export type BackgroundSize = 'cover' | 'contain' | 'auto';
+export type BackgroundPosition = 'center' | 'top' | 'bottom' | 'left' | 'right' | 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
+export interface StepBackgroundImage {
+  url: string;
+  size: BackgroundSize;
+  position: BackgroundPosition;
+  opacity: number; // 0-1
+  overlay?: string; // Optional color overlay (e.g. 'rgba(0,0,0,0.5)')
+}
+
 export interface Step {
   id: string;
   title: string;
@@ -126,6 +140,10 @@ export interface Step {
   gridGap: number; // Gap in pixels
   // Content alignment (title, description, buttons — not questions)
   contentAlignment?: ContentAlignment;
+  // Background image
+  backgroundImage?: StepBackgroundImage;
+  // Layout
+  minHeight?: number; // Optional minimum height in pixels
   // Navigation
   backButton: ButtonConfig;
   continueButton: ButtonConfig;

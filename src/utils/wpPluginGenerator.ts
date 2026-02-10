@@ -124,6 +124,15 @@ export function generateThemeCSS(theme: Theme): string {
   border: none;
 }
 
+.wp-form-step.wp-form-step-flex {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.wp-form-step-spacer {
+  flex: 1 1 auto !important;
+}
+
 .wp-form-step-title {
   font-family: var(--wp-form-heading-font);
   font-size: calc(var(--wp-form-font-size) * ${theme.typography.headingScale});
@@ -1031,16 +1040,47 @@ function generateStepHTML(step: Step, index: number, totalSteps: number, theme: 
   const titleInlineStyle = alignment !== 'left' ? ` style="text-align: ${alignment} !important; display: block !important;"` : '';
   const descInlineStyle = alignment !== 'left' ? ` style="text-align: ${alignment} !important; display: block !important;"` : '';
   
+  // Background image styles
+  const bgImage = step.backgroundImage;
+  let stepStyle = index > 0 ? 'display: none;' : '';
+  const hasMinHeight = !!step.minHeight;
+  const minHeightClass = hasMinHeight ? ' wp-form-step-flex' : '';
+  if (step.minHeight) {
+    if (index === 0) {
+      stepStyle += ` display: flex !important; flex-direction: column !important;`;
+    }
+    stepStyle += ` min-height: ${step.minHeight}px;`;
+  }
+  const navMarginTop = hasMinHeight ? ' margin-top: auto;' : '';
+  if (bgImage?.url) {
+    const bgPos = (bgImage.position || 'center').replace('-', ' ');
+    stepStyle += ` position: relative; background-image: url(${escapePhpString(bgImage.url)}); background-size: ${bgImage.size || 'cover'}; background-position: ${bgPos}; background-repeat: no-repeat; padding: ${theme.spacing.formPadding}px; margin: -${theme.spacing.formPadding}px;`;
+  }
+  const stepStyleAttr = stepStyle ? ` style="${stepStyle.trim()}"` : '';
+
+  // Build overlay HTML
+  let overlayHtml = '';
+  if (bgImage?.url) {
+    if (bgImage.overlay) {
+      overlayHtml += `\n            <div style="position: absolute; inset: 0; background: ${bgImage.overlay}; pointer-events: none;"></div>`;
+    }
+    if ((bgImage.opacity ?? 1) < 1) {
+      overlayHtml += `\n            <div style="position: absolute; inset: 0; background: ${theme.colors.background}; opacity: ${1 - (bgImage.opacity ?? 1)}; pointer-events: none;"></div>`;
+    }
+  }
+  const contentWrapOpen = bgImage?.url ? `\n            <div style="position: relative; z-index: 1;${hasMinHeight ? ' display: flex !important; flex-direction: column !important; flex: 1 1 auto !important; min-height: 0;' : ''}">` : '';
+  const contentWrapClose = bgImage?.url ? '\n            </div>' : '';
+
   return `
-        <div class="wp-form-step${alignClass}" data-step="${index}" data-step-id="${escapePhpString(step.id)}" ${index > 0 ? 'style="display: none;"' : ''}>
+        <div class="wp-form-step${alignClass}${minHeightClass}" data-step="${index}" data-step-id="${escapePhpString(step.id)}"${stepStyleAttr}>${overlayHtml}${contentWrapOpen}
             <h2 class="wp-form-step-title"${titleInlineStyle}><?php echo esc_html('${stepTitle}'); ?></h2>
             ${step.description ? `<p class="wp-form-step-description"${descInlineStyle}><?php echo esc_html('${stepDesc}'); ?></p>` : ''}
             
             <div class="wp-form-questions" style="grid-template-columns: repeat(${step.gridColumns}, 1fr); gap: ${step.gridGap}px;">
                 ${step.questions.map(q => generateQuestionHTML(q, step.gridColumns)).join('\n                ')}
             </div>
-            
-            <div class="wp-form-navigation"${alignment === 'center' ? ' style="justify-content: center !important;"' : alignment === 'right' ? ' style="justify-content: flex-end !important;"' : ''}>
+            ${hasMinHeight ? '\n            <div class="wp-form-step-spacer" style="flex: 1 1 auto !important; min-height: 0;"></div>' : ''}
+            <div class="wp-form-navigation"${alignment === 'center' ? ` style="justify-content: center !important;${navMarginTop}"` : alignment === 'right' ? ` style="justify-content: flex-end !important;${navMarginTop}"` : (navMarginTop ? ` style="${navMarginTop.trim()}"` : '')}>
                 ${step.backButton.enabled && !isFirst ? `
                 <button type="button" class="wp-form-btn wp-form-btn-back" data-action="back">
                     <?php echo esc_html('${backLabel}'); ?>
@@ -1053,7 +1093,7 @@ function generateStepHTML(step: Step, index: number, totalSteps: number, theme: 
                 </button>
                 ` : ''}
             </div>
-        </div>`;
+        ${contentWrapClose}</div>`;
 }
 
 function generateQuestionHTML(question: Question, gridColumns: number): string {
@@ -1247,6 +1287,17 @@ function generateQuestionHTML(question: Question, gridColumns: number): string {
     
     case 'hidden':
       return `<input type="hidden" name="${fieldName}" value="${defaultVal}">`;
+    
+    case 'helper_text': {
+      const alignment = question.textAlignment || 'left';
+      const content = escapePhpString(question.helperContent || '');
+      return `
+                <div class="wp-form-field wp-form-helper-text" style="${style} text-align: ${alignment};" data-question-id="${questionId}">
+                    <div class="wp-form-helper-content" style="white-space: pre-wrap;">
+                        <?php echo esc_html('${content}'); ?>
+                    </div>
+                </div>`;
+    }
     
     default:
       inputHTML = `<input type="text" class="wp-form-field-input" name="${fieldName}" id="${questionId}">`;
@@ -1690,6 +1741,9 @@ export function generateFormJS(form: Form): string {
                 
                 log('Checking field:', questionId);
                 
+                // Skip helper text fields (no input to validate)
+                if ($field.hasClass('wp-form-helper-text')) return;
+                
                 const questionsArray = Array.isArray(stepConfig.questions) ? stepConfig.questions : [];
                 const questionConfig = questionsArray.find(q => q.id === questionId) || {};
                 const validation = questionConfig.validation || {};
@@ -2062,9 +2116,13 @@ export function generateFormJS(form: Form): string {
             const self = this;
             log('Going to step', index);
             
-            this.steps.eq(this.currentStep).fadeOut(200, function() {
+            var currentStepEl = this.steps.eq(this.currentStep);
+            currentStepEl.animate({opacity: 0}, 200, function() {
+                currentStepEl.css('display', 'none');
                 self.currentStep = index;
-                self.steps.eq(self.currentStep).fadeIn(200);
+                var step = self.steps.eq(self.currentStep);
+                var displayVal = step.hasClass('wp-form-step-flex') ? 'flex' : 'block';
+                step.css({display: displayVal, 'flex-direction': 'column', opacity: 0}).animate({opacity: 1}, 200);
                 self.updateProgress();
                 self.evaluateConditionals();
                 

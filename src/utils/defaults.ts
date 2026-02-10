@@ -172,6 +172,14 @@ export const createQuestion = (type: QuestionType, gridRow: number = 1): Questio
     ];
   }
 
+  // Set defaults for helper text
+  if (type === 'helper_text') {
+    baseQuestion.helperContent = 'Enter your helper text here...';
+    baseQuestion.textAlignment = 'left';
+    baseQuestion.hideLabel = true;
+    baseQuestion.validation = { required: false };
+  }
+
   return baseQuestion;
 };
 
@@ -232,6 +240,7 @@ function getDefaultLabel(type: QuestionType): string {
     rating: 'Rating',
     slider: 'Slider',
     hidden: 'Hidden Field',
+    helper_text: 'Helper Text',
   };
   return labels[type] || 'Field';
 }
@@ -258,6 +267,7 @@ function getDefaultPlaceholder(type: QuestionType): string {
     rating: '',
     slider: '',
     hidden: '',
+    helper_text: '',
   };
   return placeholders[type] || '';
 }
@@ -299,6 +309,7 @@ export const questionTypeInfo: Record<QuestionType, { label: string; icon: strin
   rating: { label: 'Rating', icon: '★', category: 'Advanced' },
   slider: { label: 'Slider', icon: '—○—', category: 'Advanced' },
   hidden: { label: 'Hidden', icon: '∅', category: 'Advanced' },
+  helper_text: { label: 'Helper Text', icon: '¶', category: 'Layout' },
 };
 
 // Group question types by category

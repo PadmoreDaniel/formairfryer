@@ -84,6 +84,7 @@ export function QuestionEditor() {
     eircode: 'Eircode',
     numberplate: 'Number Plate',
     privacy_policy: 'Privacy Policy',
+    helper_text: 'Helper Text',
   };
 
   return (
@@ -197,6 +198,48 @@ export function QuestionEditor() {
                 placeholder="https://example.com/privacy-policy"
               />
               <span className="form-hint">Link to your privacy policy page</span>
+            </div>
+          </>
+        )}
+
+        {selectedQuestion.type === 'helper_text' && (
+          <>
+            <div className="form-group">
+              <label>Text Content</label>
+              <textarea
+                value={selectedQuestion.helperContent || ''}
+                onChange={(e) => updateQuestion({ helperContent: e.target.value })}
+                placeholder="Enter helper text to display..."
+                rows={4}
+                style={{ width: '100%', resize: 'vertical' }}
+              />
+              <span className="form-hint">This text will be displayed as-is with no input field</span>
+            </div>
+            <div className="form-group">
+              <label>Text Alignment</label>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {(['left', 'center', 'right'] as const).map((align) => (
+                  <button
+                    key={align}
+                    type="button"
+                    className={`btn-small ${selectedQuestion.textAlignment === align ? 'active' : ''}`}
+                    onClick={() => updateQuestion({ textAlignment: align })}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      border: `2px solid ${selectedQuestion.textAlignment === align ? '#048080' : '#E1E1DF'}`,
+                      borderRadius: '8px',
+                      background: selectedQuestion.textAlignment === align ? '#e6f3f3' : '#fff',
+                      color: selectedQuestion.textAlignment === align ? '#048080' : '#505050',
+                      fontWeight: selectedQuestion.textAlignment === align ? 600 : 400,
+                      cursor: 'pointer',
+                      textTransform: 'capitalize',
+                    }}
+                  >
+                    {align === 'left' ? '⬅ Left' : align === 'center' ? '⬌ Center' : 'Right ➡'}
+                  </button>
+                ))}
+              </div>
             </div>
           </>
         )}

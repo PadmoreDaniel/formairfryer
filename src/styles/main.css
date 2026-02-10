@@ -1790,6 +1790,7 @@ body {
 .preview-step {
   padding: 0;
   color: inherit;
+  overflow: hidden;
 }
 
 .preview-step .step-title {

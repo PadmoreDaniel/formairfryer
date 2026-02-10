@@ -117,6 +117,7 @@ Available question types:
 - eircode: Irish postcode
 - numberplate: Vehicle registration
 - privacy_policy: Privacy policy acceptance checkbox with link
+- helper_text: Display-only text block (no input), supports left/center/right alignment
 
 Respond ONLY with a valid JSON object in this exact format:
 {

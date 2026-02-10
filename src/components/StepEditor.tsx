@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useBuilder } from '../context/BuilderContext';
-import { Question, QuestionType } from '../types';
+import { Question, QuestionType, BackgroundSize, BackgroundPosition } from '../types';
 import { questionTypeInfo } from '../utils/defaults';
 
 export function StepEditor() {
@@ -220,6 +220,238 @@ export function StepEditor() {
               {align === 'left' ? '◧' : align === 'center' ? '◫' : '◨'} {align}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Min Height */}
+      <div className="step-layout-config" style={{ marginBottom: '12px', padding: '12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
+        <h4 style={{ marginBottom: '8px', fontSize: '13px', fontWeight: 600 }}>📏 Min Height</h4>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <input
+            type="number"
+            value={step.minHeight || ''}
+            onChange={(e) =>
+              dispatch({
+                type: 'UPDATE_STEP',
+                payload: {
+                  stepId: step.id,
+                  updates: { minHeight: e.target.value ? parseInt(e.target.value) : undefined },
+                },
+              })
+            }
+            placeholder="Auto"
+            min="0"
+            step="10"
+            style={{ flex: 1, padding: '6px 8px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px', background: 'var(--color-surface)' }}
+          />
+          <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>px</span>
+          {step.minHeight && (
+            <button
+              onClick={() =>
+                dispatch({
+                  type: 'UPDATE_STEP',
+                  payload: { stepId: step.id, updates: { minHeight: undefined } },
+                })
+              }
+              style={{ padding: '4px 8px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', background: 'transparent', cursor: 'pointer', fontSize: '11px', color: 'var(--color-error, #e53e3e)' }}
+              title="Reset to auto"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+        <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '4px' }}>Set a minimum height for this step (leave empty for auto)</p>
+      </div>
+
+      {/* Background Image */}
+      <div className="step-layout-config" style={{ marginBottom: '12px', padding: '12px', background: 'var(--color-bg)', borderRadius: 'var(--radius-md)' }}>
+        <h4 style={{ marginBottom: '8px', fontSize: '13px', fontWeight: 600 }}>🖼️ Background Image</h4>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div>
+            <label style={{ fontSize: '11px', color: 'var(--color-text-muted)', display: 'block', marginBottom: '4px' }}>Image URL</label>
+            <div style={{ display: 'flex', gap: '4px' }}>
+              <input
+                type="text"
+                value={step.backgroundImage?.url || ''}
+                onChange={(e) =>
+                  dispatch({
+                    type: 'UPDATE_STEP',
+                    payload: {
+                      stepId: step.id,
+                      updates: {
+                        backgroundImage: {
+                          url: e.target.value,
+                          size: step.backgroundImage?.size || 'cover',
+                          position: step.backgroundImage?.position || 'center',
+                          opacity: step.backgroundImage?.opacity ?? 1,
+                          overlay: step.backgroundImage?.overlay || '',
+                        },
+                      },
+                    },
+                  })
+                }
+                placeholder="https://example.com/image.jpg"
+                style={{ flex: 1, padding: '6px 8px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px', background: 'var(--color-surface)' }}
+              />
+              {step.backgroundImage?.url && (
+                <button
+                  onClick={() =>
+                    dispatch({
+                      type: 'UPDATE_STEP',
+                      payload: { stepId: step.id, updates: { backgroundImage: undefined } },
+                    })
+                  }
+                  style={{ padding: '6px 8px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', background: 'transparent', cursor: 'pointer', fontSize: '12px', color: 'var(--color-error, #e53e3e)' }}
+                  title="Remove background image"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          </div>
+
+          {step.backgroundImage?.url && (
+            <>
+              {/* Preview thumbnail */}
+              <div style={{ borderRadius: 'var(--radius-sm)', overflow: 'hidden', border: '1px solid var(--color-border)', height: '80px', backgroundImage: `url(${step.backgroundImage.url})`, backgroundSize: step.backgroundImage.size || 'cover', backgroundPosition: (step.backgroundImage.position || 'center').replace('-', ' '), opacity: step.backgroundImage.opacity ?? 1 }} />
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div>
+                  <label style={{ fontSize: '11px', color: 'var(--color-text-muted)', display: 'block', marginBottom: '4px' }}>Size</label>
+                  <select
+                    value={step.backgroundImage.size || 'cover'}
+                    onChange={(e) =>
+                      dispatch({
+                        type: 'UPDATE_STEP',
+                        payload: {
+                          stepId: step.id,
+                          updates: {
+                            backgroundImage: { ...step.backgroundImage!, size: e.target.value as BackgroundSize },
+                          },
+                        },
+                      })
+                    }
+                    style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px', background: 'var(--color-surface)' }}
+                  >
+                    <option value="cover">Cover</option>
+                    <option value="contain">Contain</option>
+                    <option value="auto">Auto</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px', color: 'var(--color-text-muted)', display: 'block', marginBottom: '4px' }}>Position</label>
+                  <select
+                    value={step.backgroundImage.position || 'center'}
+                    onChange={(e) =>
+                      dispatch({
+                        type: 'UPDATE_STEP',
+                        payload: {
+                          stepId: step.id,
+                          updates: {
+                            backgroundImage: { ...step.backgroundImage!, position: e.target.value as BackgroundPosition },
+                          },
+                        },
+                      })
+                    }
+                    style={{ width: '100%', padding: '6px 8px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '12px', background: 'var(--color-surface)' }}
+                  >
+                    <option value="center">Center</option>
+                    <option value="top">Top</option>
+                    <option value="bottom">Bottom</option>
+                    <option value="left">Left</option>
+                    <option value="right">Right</option>
+                    <option value="top-left">Top Left</option>
+                    <option value="top-right">Top Right</option>
+                    <option value="bottom-left">Bottom Left</option>
+                    <option value="bottom-right">Bottom Right</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '11px', color: 'var(--color-text-muted)', display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <span>Opacity</span>
+                  <span>{Math.round((step.backgroundImage.opacity ?? 1) * 100)}%</span>
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={step.backgroundImage.opacity ?? 1}
+                  onChange={(e) =>
+                    dispatch({
+                      type: 'UPDATE_STEP',
+                      payload: {
+                        stepId: step.id,
+                        updates: {
+                          backgroundImage: { ...step.backgroundImage!, opacity: parseFloat(e.target.value) },
+                        },
+                      },
+                    })
+                  }
+                  style={{ width: '100%' }}
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: '11px', color: 'var(--color-text-muted)', display: 'block', marginBottom: '4px' }}>Color Overlay</label>
+                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                  {[
+                    { label: 'None', value: '' },
+                    { label: 'Dark', value: 'rgba(0,0,0,0.5)' },
+                    { label: 'Light', value: 'rgba(255,255,255,0.5)' },
+                    { label: 'Primary', value: 'rgba(4,128,128,0.4)' },
+                  ].map((preset) => (
+                    <button
+                      key={preset.label}
+                      style={{
+                        flex: 1,
+                        padding: '4px 6px',
+                        border: `1.5px solid ${(step.backgroundImage?.overlay || '') === preset.value ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                        borderRadius: 'var(--radius-sm)',
+                        background: (step.backgroundImage?.overlay || '') === preset.value ? 'rgba(4, 128, 128, 0.1)' : 'transparent',
+                        cursor: 'pointer',
+                        fontSize: '11px',
+                        fontWeight: (step.backgroundImage?.overlay || '') === preset.value ? 600 : 400,
+                        color: (step.backgroundImage?.overlay || '') === preset.value ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                      }}
+                      onClick={() =>
+                        dispatch({
+                          type: 'UPDATE_STEP',
+                          payload: {
+                            stepId: step.id,
+                            updates: {
+                              backgroundImage: { ...step.backgroundImage!, overlay: preset.value },
+                            },
+                          },
+                        })
+                      }
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  value={step.backgroundImage.overlay || ''}
+                  onChange={(e) =>
+                    dispatch({
+                      type: 'UPDATE_STEP',
+                      payload: {
+                        stepId: step.id,
+                        updates: {
+                          backgroundImage: { ...step.backgroundImage!, overlay: e.target.value },
+                        },
+                      },
+                    })
+                  }
+                  placeholder="Custom: rgba(0,0,0,0.5)"
+                  style={{ marginTop: '4px', width: '100%', padding: '4px 8px', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '11px', background: 'var(--color-surface)' }}
+                />
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -495,6 +727,22 @@ function QuestionPreview({ question }: { question: Question }) {
           <span style={{ fontSize: '0.85em' }}>
             I agree to the <span style={{ color: '#048080', textDecoration: 'underline' }}>Privacy Policy</span>
           </span>
+        </div>
+      );
+    case 'helper_text':
+      return (
+        <div
+          className="preview-helper-text"
+          style={{
+            textAlign: question.textAlignment || 'left',
+            fontSize: '0.85em',
+            color: '#666',
+            padding: '4px 0',
+            fontStyle: 'italic',
+            whiteSpace: 'pre-wrap',
+          }}
+        >
+          {question.helperContent || 'Helper text...'}
         </div>
       );
     default:

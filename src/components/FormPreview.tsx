@@ -177,6 +177,8 @@ export function FormPreview() {
     
     currentStep.questions.forEach((question) => {
       if (!shouldShowQuestion(question)) return;
+      // Skip non-input types
+      if (question.type === 'hidden' || question.type === 'helper_text') return;
       
       const key = question.fieldName || question.id;
       const value = formData[key];
@@ -464,8 +466,40 @@ export function FormPreview() {
               borderRadius: theme.borders.radius,
               overflow: 'hidden',
               border: `${theme.borders.width}px ${theme.borders.style} ${theme.colors.border}`,
+              position: 'relative',
+              ...(currentStep.minHeight ? { minHeight: currentStep.minHeight, display: 'flex', flexDirection: 'column' as const } : {}),
+              ...(currentStep.backgroundImage?.url ? {
+                backgroundImage: `url(${currentStep.backgroundImage.url})`,
+                backgroundSize: currentStep.backgroundImage.size || 'cover',
+                backgroundPosition: (currentStep.backgroundImage.position || 'center').replace('-', ' '),
+                backgroundRepeat: 'no-repeat',
+              } : {}),
             }}
           >
+          {/* Background overlays */}
+          {currentStep.backgroundImage?.url && currentStep.backgroundImage.overlay && (
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: currentStep.backgroundImage.overlay,
+                pointerEvents: 'none',
+                zIndex: 0,
+              }}
+            />
+          )}
+          {currentStep.backgroundImage?.url && (currentStep.backgroundImage.opacity ?? 1) < 1 && (
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: theme.colors.background,
+                opacity: 1 - (currentStep.backgroundImage.opacity ?? 1),
+                pointerEvents: 'none',
+                zIndex: 0,
+              }}
+            />
+          )}
           {submitted ? (
             <div className="submission-success" style={{ 
               padding: theme.spacing.formPadding,
@@ -485,12 +519,16 @@ export function FormPreview() {
               {isCardTop && progressBar}
 
               {/* Main Content */}
-              <div style={{ padding: theme.spacing.formPadding }}>
+              <div style={{ padding: theme.spacing.formPadding, position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', flex: 1 }}>
                 {/* Top/Inline Progress Bar */}
                 {(isTop) && progressBar}
 
                 {/* Step Content */}
-                <div className="preview-step">
+                <div
+                  className="preview-step"
+                  style={{ flex: 1 }}
+                >
+                  <div style={{ position: 'relative', zIndex: 1 }}>
                   <h2
                     className="step-title"
                     style={{
@@ -537,6 +575,7 @@ export function FormPreview() {
                         </div>
                       ))}
                   </div>
+                  </div>
                 </div>
 
                 {/* Navigation Buttons */}
@@ -544,6 +583,7 @@ export function FormPreview() {
                   justifyContent: currentStep.contentAlignment === 'center' ? 'center'
                     : currentStep.contentAlignment === 'right' ? 'flex-end'
                     : undefined,
+                  marginTop: 'auto',
                 }}>
                   {currentStep.backButton.enabled && !isFirstStep ? (
                     <button
@@ -1050,6 +1090,25 @@ function QuestionField({
                 </a>
               </span>
             </label>
+          </div>
+        );
+      }
+
+      case 'helper_text': {
+        const alignment = question.textAlignment || 'left';
+        return (
+          <div
+            className="helper-text-block"
+            style={{
+              textAlign: alignment,
+              color: theme.colors.text,
+              fontSize: theme.typography.baseFontSize,
+              lineHeight: theme.typography.lineHeight,
+              padding: '4px 0',
+              whiteSpace: 'pre-wrap',
+            }}
+          >
+            {question.helperContent || 'Helper text'}
           </div>
         );
       }
