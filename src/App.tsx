@@ -13,6 +13,7 @@ function AppContent() {
   const { user, loading: authLoading } = useAuth();
   const { loadForm } = useBuilder();
   const [currentView, setCurrentView] = useState<AppView>(user ? 'builder' : 'login');
+  const [loadedFormId, setLoadedFormId] = useState<string | null>(null);
 
   // Update view when auth state changes
   React.useEffect(() => {
@@ -21,12 +22,14 @@ function AppContent() {
     }
   }, [user, currentView]);
 
-  const handleLoadForm = (form: Form) => {
+  const handleLoadForm = (form: Form, firestoreId?: string) => {
     loadForm(form);
+    setLoadedFormId(firestoreId || null);
     setCurrentView('builder');
   };
 
   const handleNewForm = () => {
+    setLoadedFormId(null);
     setCurrentView('builder');
   };
 
@@ -67,6 +70,7 @@ function AppContent() {
   return (
     <FormBuilder 
       onShowFormsList={handleGoToFormsList}
+      loadedFormId={loadedFormId}
     />
   );
 }

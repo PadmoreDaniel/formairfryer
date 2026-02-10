@@ -20,14 +20,22 @@ type RightPanelTab = 'question' | 'theme' | 'progress' | 'navigation' | 'flow' |
 
 interface FormBuilderProps {
   onShowFormsList?: () => void;
+  loadedFormId?: string | null;
 }
 
-export function FormBuilder({ onShowFormsList }: FormBuilderProps) {
+export function FormBuilder({ onShowFormsList, loadedFormId }: FormBuilderProps) {
   const { state, dispatch, getSelectedStep } = useBuilder();
   const { user } = useAuth();
   const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>('question');
-  const [currentFormId, setCurrentFormId] = useState<string | null>(null);
+  const [currentFormId, setCurrentFormId] = useState<string | null>(loadedFormId || null);
   const [saving, setSaving] = useState(false);
+
+  // Update currentFormId when a form is loaded from the list
+  useEffect(() => {
+    if (loadedFormId !== undefined && loadedFormId !== null) {
+      setCurrentFormId(loadedFormId);
+    }
+  }, [loadedFormId]);
 
   const handleSave = useCallback(async () => {
     // Always save to localStorage
@@ -101,8 +109,9 @@ export function FormBuilder({ onShowFormsList }: FormBuilderProps) {
     dispatch({ type: 'TOGGLE_PREVIEW', payload: true });
   }, [dispatch]);
 
-  // Load from localStorage on mount
+  // Load from localStorage on mount (only if no form was loaded from the list)
   useEffect(() => {
+    if (loadedFormId) return; // Skip - a form was explicitly loaded
     const savedForm = localStorage.getItem('wp-form-builder-form');
     if (savedForm) {
       try {

@@ -4,7 +4,7 @@ import { getUserForms, deleteForm, SavedForm } from '../services/formService';
 import { Form, Step } from '../types';
 
 interface FormsListProps {
-  onLoadForm: (form: Form) => void;
+  onLoadForm: (form: Form, firestoreId?: string) => void;
   onNewForm: () => void;
   onBack: () => void;
 }
@@ -56,7 +56,7 @@ export function FormsList({ onLoadForm, onNewForm, onBack }: FormsListProps) {
   };
 
   const handleLoad = (savedForm: SavedForm) => {
-    onLoadForm(savedForm.form);
+    onLoadForm(savedForm.form, savedForm.id);
   };
 
   const formatDate = (timestamp: any) => {
