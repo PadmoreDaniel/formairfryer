@@ -96,16 +96,16 @@ export function generateThemeCSS(theme: Theme): string {
 }
 
 .wp-form-progress-bar {
-  height: var(--wp-form-progress-height);
-  background-color: var(--wp-form-progress-bg);
-  border-radius: var(--wp-form-progress-radius);
+  height: var(--wp-form-progress-height, ${theme.progressBar.height}px);
+  background-color: var(--wp-form-progress-bg, ${theme.progressBar.backgroundColor});
+  border-radius: var(--wp-form-progress-radius, ${theme.progressBar.borderRadius}px);
   overflow: hidden;
 }
 
 .wp-form-progress-fill {
   height: 100%;
-  background-color: var(--wp-form-progress-fill);
-  border-radius: var(--wp-form-progress-radius);
+  background-color: var(--wp-form-progress-fill, ${theme.progressBar.fillColor});
+  border-radius: var(--wp-form-progress-radius, ${theme.progressBar.borderRadius}px);
   transition: width 0.3s ${theme.progressBar.animationType};
 }
 
@@ -518,7 +518,7 @@ export function generateThemeCSS(theme: Theme): string {
 
 .wp-form.progress-card-top .wp-form-progress-bar {
   border-radius: 0;
-  height: var(--wp-form-progress-height);
+  height: var(--wp-form-progress-height, ${theme.progressBar.height}px);
   margin: 0;
 }
 
@@ -568,7 +568,7 @@ export function generateThemeCSS(theme: Theme): string {
 
 .wp-form.progress-card-bottom .wp-form-progress-bar {
   border-radius: 0;
-  height: var(--wp-form-progress-height);
+  height: var(--wp-form-progress-height, ${theme.progressBar.height}px);
   margin: 0;
 }
 
@@ -920,8 +920,8 @@ export function generateFormHTML(form: Form): string {
         </div>
         <?php endif; ?>
         
-        <div class="wp-form-progress-bar">
-            <div class="wp-form-progress-fill" style="width: 0%;"></div>
+        <div class="wp-form-progress-bar" style="height: ${form.theme.progressBar.height}px; background-color: ${form.theme.progressBar.backgroundColor}; border-radius: ${isCardPosition ? '0' : form.theme.progressBar.borderRadius + 'px'}; overflow: hidden;">
+            <div class="wp-form-progress-fill" style="width: 0%; height: 100%; background-color: ${form.theme.progressBar.fillColor}; border-radius: ${isCardPosition ? '0' : form.theme.progressBar.borderRadius + 'px'}; transition: width 0.3s ${form.theme.progressBar.animationType};"></div>
         </div>
         
         <?php if (${progressConfig.showPercentage ? 'true' : 'false'} && !${isCardPosition ? 'true' : 'false'}): ?>
