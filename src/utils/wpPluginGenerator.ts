@@ -124,7 +124,13 @@ export function generateThemeCSS(theme: Theme): string {
   border: none;
 }
 
+/* Steps with min-height use flex layout (but respect display:none for hidden steps) */
 .wp-form-step.wp-form-step-flex {
+  flex-direction: column;
+}
+
+/* Only show flex when step is actually visible (controlled by JS or initial state) */
+.wp-form-step.wp-form-step-active {
   display: flex !important;
   flex-direction: column !important;
 }
@@ -1043,13 +1049,14 @@ function generateStepHTML(step: Step, index: number, totalSteps: number, theme: 
   let stepStyle = index > 0 ? 'display: none;' : '';
   const hasMinHeight = !!step.minHeight;
   const minHeightClass = hasMinHeight ? ' wp-form-step-flex' : '';
+  const activeClass = index === 0 ? ' wp-form-step-active' : ''; // First step is active by default
   if (step.minHeight) {
     if (index === 0) {
       stepStyle += ` display: flex !important; flex-direction: column !important;`;
     }
     stepStyle += ` min-height: ${step.minHeight}px;`;
   }
-  const navMarginTop = hasMinHeight ? ' margin-top: auto;' : '';
+  const navMarginTop = hasMinHeight ? ' margin-top: auto; padding-top: var(--wp-form-section-gap); border-top: none;' : '';
   if (bgImage?.url) {
     const bgPos = (bgImage.position || 'center').replace('-', ' ');
     stepStyle += ` position: relative; background-image: url(${escapePhpString(bgImage.url)}); background-size: ${bgImage.size || 'cover'}; background-position: ${bgPos}; background-repeat: no-repeat; padding: ${theme.spacing.formPadding}px; margin: -${theme.spacing.formPadding}px;`;
@@ -1070,7 +1077,7 @@ function generateStepHTML(step: Step, index: number, totalSteps: number, theme: 
   const contentWrapClose = bgImage?.url ? '\n            </div>' : '';
 
   return `
-        <div class="wp-form-step${alignClass}${minHeightClass}" data-step="${index}" data-step-id="${escapePhpString(step.id)}"${stepStyleAttr}>${overlayHtml}${contentWrapOpen}
+        <div class="wp-form-step${alignClass}${minHeightClass}${activeClass}" data-step="${index}" data-step-id="${escapePhpString(step.id)}"${stepStyleAttr}>${overlayHtml}${contentWrapOpen}
             <h2 class="wp-form-step-title"${titleInlineStyle}><?php echo esc_html('${stepTitle}'); ?></h2>
             ${step.description ? `<p class="wp-form-step-description"${descInlineStyle}><?php echo esc_html('${stepDesc}'); ?></p>` : ''}
             
@@ -2236,11 +2243,11 @@ export function generateFormJS(form: Form): string {
             
             var currentStepEl = this.steps.eq(this.currentStep);
             currentStepEl.animate({opacity: 0}, 150, function() {
-                currentStepEl.css('display', 'none');
+                currentStepEl.css('display', 'none').removeClass('wp-form-step-active');
                 self.currentStep = index;
                 var step = self.steps.eq(self.currentStep);
                 var displayVal = step.hasClass('wp-form-step-flex') ? 'flex' : 'block';
-                step.css({display: displayVal, 'flex-direction': 'column', opacity: 0}).animate({opacity: 1}, 150, function() {
+                step.addClass('wp-form-step-active').css({display: displayVal, 'flex-direction': 'column', opacity: 0}).animate({opacity: 1}, 150, function() {
                     // Reset navigation flag after animation completes
                     self.isNavigating = false;
                 });

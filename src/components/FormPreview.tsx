@@ -656,6 +656,8 @@ export function FormPreview() {
                     : currentStep.contentAlignment === 'right' ? 'flex-end'
                     : undefined,
                   marginTop: 'auto',
+                  paddingTop: currentStep.minHeight ? theme.spacing.sectionGap : undefined,
+                  borderTop: currentStep.minHeight ? 'none' : undefined,
                 }}>
                   {currentStep.backButton.enabled && !isFirstStep ? (
                     <button
