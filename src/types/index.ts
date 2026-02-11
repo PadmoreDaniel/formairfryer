@@ -261,6 +261,12 @@ export interface Theme {
 }
 
 // ==================== Form Submission ====================
+export interface CustomField {
+  id: string;
+  key: string;
+  value: string;
+}
+
 export interface SubmissionConfig {
   method: 'POST' | 'GET';
   url: string;
@@ -271,6 +277,8 @@ export interface SubmissionConfig {
   errorMessage: string;
   redirectOnSuccess?: string;
   redirectOnError?: string;
+  // Custom fields to include in the POST body
+  customFields?: CustomField[];
   // Success screen customization
   successIcon?: string; // Emoji or icon for success screen
   successBackgroundColor?: string; // Background color for success screen

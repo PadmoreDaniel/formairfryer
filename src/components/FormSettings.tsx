@@ -158,6 +158,84 @@ export function FormSettings() {
               />
             </div>
 
+            <h4 style={{ marginTop: '24px', marginBottom: '12px', borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>Custom Fields</h4>
+            <p className="hint" style={{ marginBottom: '12px' }}>Add extra fields to include in the POST body</p>
+            
+            <div className="custom-fields-container">
+              {(form.submissionConfig.customFields || []).length === 0 && (
+                <div className="custom-fields-empty">
+                  <span className="custom-fields-empty-icon">📋</span>
+                  <p>No custom fields added yet</p>
+                </div>
+              )}
+              
+              {(form.submissionConfig.customFields || []).map((field, index) => (
+                <div key={field.id} className="custom-field-row">
+                  <div className="custom-field-inputs">
+                    <div className="custom-field-input-group">
+                      <label>Key</label>
+                      <input
+                        type="text"
+                        value={field.key}
+                        onChange={(e) => {
+                          const newFields = [...(form.submissionConfig.customFields || [])];
+                          newFields[index] = { ...newFields[index], key: e.target.value };
+                          updateSubmissionConfig({ customFields: newFields });
+                        }}
+                        placeholder="e.g., source"
+                      />
+                    </div>
+                    <div className="custom-field-input-group">
+                      <label>Value</label>
+                      <input
+                        type="text"
+                        value={field.value}
+                        onChange={(e) => {
+                          const newFields = [...(form.submissionConfig.customFields || [])];
+                          newFields[index] = { ...newFields[index], value: e.target.value };
+                          updateSubmissionConfig({ customFields: newFields });
+                        }}
+                        placeholder="e.g., website_form"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newFields = (form.submissionConfig.customFields || []).filter((_, i) => i !== index);
+                      updateSubmissionConfig({ customFields: newFields });
+                    }}
+                    className="custom-field-remove"
+                    title="Remove field"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                    </svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+            
+            <button
+              type="button"
+              onClick={() => {
+                const newField = {
+                  id: `custom-field-${Date.now()}`,
+                  key: '',
+                  value: ''
+                };
+                updateSubmissionConfig({ 
+                  customFields: [...(form.submissionConfig.customFields || []), newField] 
+                });
+              }}
+              className="custom-field-add-btn"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
+              Add Custom Field
+            </button>
+
             <h4 style={{ marginTop: '24px', marginBottom: '12px', borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>Success Screen Design</h4>
 
             <div className="form-group">

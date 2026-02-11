@@ -439,11 +439,12 @@ export function generateThemeCSS(theme: Theme): string {
   background-color: transparent;
   color: var(--wp-form-text);
   border: none;
+  opacity: 0.6;
 }
 
 .wp-form-btn-back:hover {
   background-color: transparent;
-  opacity: 0.7;
+  opacity: 1;
 }
 
 .wp-form .wp-form-btn.wp-form-btn-continue,
@@ -1554,11 +1555,27 @@ export function generateFormJS(form: Form): string {
             });
             
             // Date mask input formatting
-            this.form.on('input', '.wp-form-date-mask-input', function() {
-                const format = $(this).data('format');
-                const formatted = self.formatDateMask($(this).val(), format);
-                $(this).val(formatted);
+            this.form.on('input', '.wp-form-date-mask-input', function(e) {
+                const $input = $(this);
+                const format = $input.data('format');
+                const prevValue = $input.data('prev-value') || '';
+                const newValue = $input.val();
+                
+                // Store current value for next comparison
+                $input.data('prev-value', newValue);
+                
+                // Detect backspace (new value is shorter) - don't reformat
+                if (newValue.length < prevValue.length) {
+                    return;
+                }
+                
+                const formatted = self.formatDateMask(newValue, format);
+                $input.val(formatted);
+                $input.data('prev-value', formatted);
             });
+            
+            // Date mask validation is handled in validateCurrentStep() when clicking Continue/Submit
+            // No onBlur validation to avoid showing errors while user is still typing
             
             // Enter key handling for single-question steps
             this.form.on('keypress', 'input, textarea, select', function(e) {
@@ -1680,6 +1697,21 @@ export function generateFormJS(form: Form): string {
             }
             
             return cleaned;
+        }
+        
+        // Show field validation error
+        showFieldError($input, message) {
+            let $error = $input.siblings('.wp-form-field-error-msg');
+            if ($error.length === 0) {
+                $error = $('<span class="wp-form-field-error-msg" style="color: red; font-size: 12px; display: block; margin-top: 4px;"></span>');
+                $input.after($error);
+            }
+            $error.text(message);
+        }
+        
+        // Hide field validation error
+        hideFieldError($input) {
+            $input.siblings('.wp-form-field-error-msg').remove();
         }
         
         collectData() {
@@ -1884,6 +1916,80 @@ export function generateFormJS(form: Form): string {
                         $field.addClass('has-error');
                         $field.find('.wp-form-field-error').text('Please enter a valid Irish number plate (e.g., 191-D-12345)').show();
                         isValid = false;
+                    }
+                }
+                
+                // Date input mask validation
+                if ($input.hasClass('wp-form-date-mask-input') && value) {
+                    const format = $input.data('format');
+                    
+                    if (format === 'date') {
+                        if (value.length !== 10) {
+                            $field.addClass('has-error');
+                            $field.find('.wp-form-field-error').text('Please enter a complete date (DD/MM/YYYY)').show();
+                            isValid = false;
+                        } else {
+                            const parts = value.split('/');
+                            if (parts.length !== 3 || parts[0].length !== 2 || parts[1].length !== 2 || parts[2].length !== 4) {
+                                $field.addClass('has-error');
+                                $field.find('.wp-form-field-error').text('Please enter date in DD/MM/YYYY format').show();
+                                isValid = false;
+                            } else {
+                                const day = parseInt(parts[0], 10);
+                                const month = parseInt(parts[1], 10);
+                                const year = parseInt(parts[2], 10);
+                                if (isNaN(day) || isNaN(month) || isNaN(year) || day < 1 || day > 31 || month < 1 || month > 12 || year < 1900 || year > 2100) {
+                                    $field.addClass('has-error');
+                                    $field.find('.wp-form-field-error').text('Please enter a valid date (DD/MM/YYYY)').show();
+                                    isValid = false;
+                                } else {
+                                    const daysInMonth = new Date(year, month, 0).getDate();
+                                    if (day > daysInMonth) {
+                                        $field.addClass('has-error');
+                                        $field.find('.wp-form-field-error').text('Invalid day for this month (max ' + daysInMonth + ')').show();
+                                        isValid = false;
+                                    }
+                                }
+                            }
+                        }
+                    } else if (format === 'datetime') {
+                        if (value.length !== 16) {
+                            $field.addClass('has-error');
+                            $field.find('.wp-form-field-error').text('Please enter a complete date and time (DD/MM/YYYY HH:MM)').show();
+                            isValid = false;
+                        } else {
+                            const datePart = value.substring(0, 10);
+                            const timePart = value.substring(11);
+                            const parts = datePart.split('/');
+                            if (parts.length !== 3 || parts[0].length !== 2 || parts[1].length !== 2 || parts[2].length !== 4) {
+                                $field.addClass('has-error');
+                                $field.find('.wp-form-field-error').text('Please enter date in DD/MM/YYYY format').show();
+                                isValid = false;
+                            } else {
+                                const day = parseInt(parts[0], 10);
+                                const month = parseInt(parts[1], 10);
+                                const year = parseInt(parts[2], 10);
+                                const timeParts = timePart.split(':');
+                                const hours = parseInt(timeParts[0], 10);
+                                const minutes = parseInt(timeParts[1], 10);
+                                if (isNaN(day) || isNaN(month) || isNaN(year) || day < 1 || day > 31 || month < 1 || month > 12 || year < 1900 || year > 2100) {
+                                    $field.addClass('has-error');
+                                    $field.find('.wp-form-field-error').text('Please enter a valid date (DD/MM/YYYY)').show();
+                                    isValid = false;
+                                } else if (isNaN(hours) || isNaN(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+                                    $field.addClass('has-error');
+                                    $field.find('.wp-form-field-error').text('Please enter a valid time (00:00 - 23:59)').show();
+                                    isValid = false;
+                                } else {
+                                    const daysInMonth = new Date(year, month, 0).getDate();
+                                    if (day > daysInMonth) {
+                                        $field.addClass('has-error');
+                                        $field.find('.wp-form-field-error').text('Invalid day for this month (max ' + daysInMonth + ')').show();
+                                        isValid = false;
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             });
@@ -2226,15 +2332,24 @@ export function generateFormJS(form: Form): string {
             log('Submitting form', this.formData);
             log('Submission config', submissionConfig);
             
+            // Merge custom fields into form data
+            const customFields = submissionConfig.customFields || [];
+            const mergedFormData = { ...this.formData };
+            customFields.forEach(field => {
+                if (field.key && field.key.trim()) {
+                    mergedFormData[field.key] = field.value;
+                }
+            });
+            
             // Use custom URL if configured, otherwise use WordPress AJAX
             const useCustomUrl = submissionConfig.url && submissionConfig.url.trim() !== '';
             const submitUrl = useCustomUrl ? submissionConfig.url : config.ajaxUrl;
             const submitData = useCustomUrl 
-                ? this.formData 
+                ? mergedFormData 
                 : {
                     action: '${pluginSettings.pluginSlug.replace(/-/g, '_')}_submit',
                     nonce: config.nonce,
-                    formData: JSON.stringify(this.formData)
+                    formData: JSON.stringify(mergedFormData)
                 };
             
             log('Submitting to', submitUrl, 'with data', submitData);

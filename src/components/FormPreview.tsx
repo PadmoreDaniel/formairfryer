@@ -242,6 +242,63 @@ export function FormPreview() {
           }
         }
         
+        // Date input mask validation
+        if (question.type === 'date' && question.useDateInputMask) {
+          const dateVal = String(value);
+          if (dateVal.length !== 10) {
+            newErrors[key] = 'Please enter a complete date (DD/MM/YYYY)';
+          } else {
+            const parts = dateVal.split('/');
+            if (parts.length !== 3 || parts[0].length !== 2 || parts[1].length !== 2 || parts[2].length !== 4) {
+              newErrors[key] = 'Please enter date in DD/MM/YYYY format';
+            } else {
+              const day = parseInt(parts[0], 10);
+              const month = parseInt(parts[1], 10);
+              const year = parseInt(parts[2], 10);
+              if (isNaN(day) || isNaN(month) || isNaN(year) || day < 1 || day > 31 || month < 1 || month > 12 || year < 1900 || year > 2100) {
+                newErrors[key] = 'Please enter a valid date (DD/MM/YYYY)';
+              } else {
+                const daysInMonth = new Date(year, month, 0).getDate();
+                if (day > daysInMonth) {
+                  newErrors[key] = `Invalid day for this month (max ${daysInMonth})`;
+                }
+              }
+            }
+          }
+        }
+        
+        // Datetime input mask validation
+        if (question.type === 'datetime' && question.useDateInputMask) {
+          const dateVal = String(value);
+          if (dateVal.length !== 16) {
+            newErrors[key] = 'Please enter a complete date and time (DD/MM/YYYY HH:MM)';
+          } else {
+            const datePart = dateVal.substring(0, 10);
+            const timePart = dateVal.substring(11);
+            const parts = datePart.split('/');
+            if (parts.length !== 3 || parts[0].length !== 2 || parts[1].length !== 2 || parts[2].length !== 4) {
+              newErrors[key] = 'Please enter date in DD/MM/YYYY format';
+            } else {
+              const day = parseInt(parts[0], 10);
+              const month = parseInt(parts[1], 10);
+              const year = parseInt(parts[2], 10);
+              const timeParts = timePart.split(':');
+              const hours = parseInt(timeParts[0], 10);
+              const minutes = parseInt(timeParts[1], 10);
+              if (isNaN(day) || isNaN(month) || isNaN(year) || day < 1 || day > 31 || month < 1 || month > 12 || year < 1900 || year > 2100) {
+                newErrors[key] = 'Please enter a valid date (DD/MM/YYYY)';
+              } else if (isNaN(hours) || isNaN(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+                newErrors[key] = 'Please enter a valid time (00:00 - 23:59)';
+              } else {
+                const daysInMonth = new Date(year, month, 0).getDate();
+                if (day > daysInMonth) {
+                  newErrors[key] = `Invalid day for this month (max ${daysInMonth})`;
+                }
+              }
+            }
+          }
+        }
+        
         if (validation.minLength && String(value).length < validation.minLength) {
           newErrors[key] = `Minimum ${validation.minLength} characters required`;
         }
@@ -831,8 +888,25 @@ function QuestionField({
               type="text"
               value={value}
               onChange={(e) => {
+                const input = e.target as HTMLInputElement;
+                const cursorPos = input.selectionStart || 0;
+                const prevValue = value || '';
+                const newValue = e.target.value;
+                
+                // Detect backspace (new value is shorter)
+                if (newValue.length < prevValue.length) {
+                  // If backspace at position after a slash, remove the slash too
+                  if (prevValue[cursorPos] === '/') {
+                    const cleaned = newValue.slice(0, cursorPos - 1) + newValue.slice(cursorPos);
+                    onChange(cleaned);
+                    return;
+                  }
+                  onChange(newValue);
+                  return;
+                }
+                
                 // Format as DD/MM/YYYY
-                let v = e.target.value.replace(/\D/g, '');
+                let v = newValue.replace(/\D/g, '');
                 if (v.length >= 2) {
                   v = v.substring(0, 2) + '/' + v.substring(2);
                 }
@@ -865,8 +939,17 @@ function QuestionField({
               type="text"
               value={value}
               onChange={(e) => {
+                const prevValue = value || '';
+                const newValue = e.target.value;
+                
+                // Detect backspace (new value is shorter)
+                if (newValue.length < prevValue.length) {
+                  onChange(newValue);
+                  return;
+                }
+                
                 // Format as DD/MM/YYYY HH:MM
-                let v = e.target.value.replace(/\D/g, '');
+                let v = newValue.replace(/\D/g, '');
                 if (v.length >= 2) {
                   v = v.substring(0, 2) + '/' + v.substring(2);
                 }

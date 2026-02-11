@@ -1018,6 +1018,152 @@ body {
   margin-top: var(--spacing-xs);
 }
 
+/* Custom Fields Section */
+.custom-fields-container {
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+}
+
+.custom-fields-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-lg) var(--spacing-md);
+  color: var(--color-text-dim);
+  text-align: center;
+}
+
+.custom-fields-empty-icon {
+  font-size: 24px;
+  margin-bottom: var(--spacing-xs);
+  opacity: 0.6;
+}
+
+.custom-fields-empty p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.custom-field-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--spacing-sm);
+  transition: all 0.15s ease;
+}
+
+.custom-field-row:last-child {
+  margin-bottom: 0;
+}
+
+.custom-field-row:hover {
+  border-color: var(--color-border-hover);
+}
+
+.custom-field-inputs {
+  display: flex;
+  flex: 1;
+  gap: var(--spacing-sm);
+}
+
+.custom-field-input-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.custom-field-input-group label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-dim);
+}
+
+.custom-field-input-group input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  transition: all 0.15s ease;
+}
+
+.custom-field-input-group input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.custom-field-input-group input::placeholder {
+  color: var(--color-text-dim);
+  opacity: 0.6;
+}
+
+.custom-field-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-dim);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.custom-field-remove:hover {
+  background: var(--color-error-bg, #fef2f2);
+  border-color: var(--color-error, #ef4444);
+  color: var(--color-error, #ef4444);
+}
+
+.custom-field-add-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  width: 100%;
+  padding: 10px var(--spacing-md);
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.custom-field-add-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: rgba(59, 130, 246, 0.05);
+}
+
+.custom-field-add-btn svg {
+  opacity: 0.7;
+}
+
+.custom-field-add-btn:hover svg {
+  opacity: 1;
+}
+
 /* ==================== Options Editor ==================== */
 .options-editor {
   display: flex;
@@ -2070,11 +2216,12 @@ body {
   background: transparent;
   color: #1F2937;
   border: none;
+  opacity: 0.6;
 }
 
 .preview-navigation .btn-back:hover {
   background: transparent;
-  opacity: 0.7;
+  opacity: 1;
 }
 
 .btn-continue {
