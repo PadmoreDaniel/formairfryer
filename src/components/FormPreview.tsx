@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useBuilder } from '../context/BuilderContext';
 import { Question, Condition, ConditionRule } from '../types';
 
@@ -10,6 +10,9 @@ export function FormPreview() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const isNavigating = useRef(false);
+  const pendingStepIndex = useRef<number | null>(null);
 
   const currentStep = form.steps[currentStepIndex] || form.steps[0];
   const isFirstStep = currentStepIndex === 0;
@@ -47,9 +50,26 @@ export function FormPreview() {
     }
   }, [currentStep, currentStepIndex, form, formData]);
 
+  // Smooth step transition function
+  const transitionToStep = (newIndex: number) => {
+    if (isTransitioning) return;
+    setIsTransitioning(true);
+    pendingStepIndex.current = newIndex;
+    // Wait for fade out, then change step
+    setTimeout(() => {
+      setCurrentStepIndex(newIndex);
+      pendingStepIndex.current = null;
+      // Allow fade in to complete before enabling interactions
+      setTimeout(() => {
+        setIsTransitioning(false);
+        isNavigating.current = false;
+      }, 150);
+    }, 150);
+  };
+
   // Auto-navigate when conditional navigation is triggered by form data changes
   useEffect(() => {
-    if (!currentStep || isSubmitting || submitted) return;
+    if (!currentStep || isSubmitting || submitted || isNavigating.current || isTransitioning) return;
 
     // Check if any conditional navigation rule is triggered
     const sortedNavigation = [...currentStep.conditionalNavigation].sort(
@@ -58,8 +78,7 @@ export function FormPreview() {
 
     for (const nav of sortedNavigation) {
       if (evaluateCondition(nav.condition)) {
-        console.log('Auto-navigation triggered by condition:', nav);
-        
+        isNavigating.current = true;
         // Small delay to allow UI to update before navigation
         setTimeout(async () => {
           if (nav.target.type === 'submit') {
@@ -67,17 +86,17 @@ export function FormPreview() {
           } else if (nav.target.type === 'specific' && nav.target.stepId) {
             const targetIndex = form.steps.findIndex((s) => s.id === nav.target.stepId);
             if (targetIndex !== -1) {
-              setCurrentStepIndex(targetIndex);
+              transitionToStep(targetIndex);
             }
           } else if (nav.target.type === 'next') {
-            setCurrentStepIndex(currentStepIndex + 1);
+            transitionToStep(currentStepIndex + 1);
           }
         }, 300);
         
         return; // Only trigger the first matching rule
       }
     }
-  }, [formData, currentStep, currentStepIndex, isSubmitting, submitted, form.steps]);
+  }, [formData, currentStep, currentStepIndex, isSubmitting, submitted, form.steps, isTransitioning]);
 
   // Safety check - if no steps exist, don't render (must be after all hooks)
   if (!currentStep) {
@@ -257,11 +276,9 @@ export function FormPreview() {
 
     for (const nav of sortedNavigation) {
       if (evaluateCondition(nav.condition)) {
-        console.log('Conditional nav triggered:', nav);
         if (nav.target.type === 'submit') return -1; // Submit form
         if (nav.target.type === 'specific' && nav.target.stepId) {
           const targetIndex = form.steps.findIndex((s) => s.id === nav.target.stepId);
-          console.log('Looking for step:', nav.target.stepId, 'found at index:', targetIndex);
           if (targetIndex !== -1) return targetIndex;
         }
         if (nav.target.type === 'next') {
@@ -280,47 +297,40 @@ export function FormPreview() {
   };
 
   const handleContinue = async () => {
+    if (isTransitioning) return;
+    
     // Check if any conditional navigation rule is triggered
     const conditionalNavMatched = currentStep.conditionalNavigation.some(nav => {
-      const result = evaluateCondition(nav.condition);
-      console.log('Checking conditional nav:', { 
-        condition: nav.condition, 
-        formData, 
-        result 
-      });
-      return result;
+      return evaluateCondition(nav.condition);
     });
-
-    console.log('Conditional nav matched:', conditionalNavMatched);
 
     // Only validate if no conditional navigation matched
     if (!conditionalNavMatched && currentStep.validateOnContinue && !validateStep()) {
-      console.log('Validation failed, stopping');
       return;
     }
 
     const nextIndex = getNextStepIndex();
-    console.log('Next step index:', nextIndex, 'Current:', currentStepIndex, 'Total steps:', form.steps.length);
     
     if (nextIndex === -1 || nextIndex >= form.steps.length) {
       // Submit form
-      console.log('Submitting form');
       await handleSubmit();
     } else {
-      console.log('Moving to step index:', nextIndex);
-      setCurrentStepIndex(nextIndex);
+      isNavigating.current = true;
+      transitionToStep(nextIndex);
     }
   };
 
   const handleBack = () => {
+    if (isTransitioning) return;
+    isNavigating.current = true;
     if (currentStep.defaultPrevStep) {
       const targetIndex = form.steps.findIndex((s) => s.id === currentStep.defaultPrevStep);
       if (targetIndex !== -1) {
-        setCurrentStepIndex(targetIndex);
+        transitionToStep(targetIndex);
         return;
       }
     }
-    setCurrentStepIndex(Math.max(0, currentStepIndex - 1));
+    transitionToStep(Math.max(0, currentStepIndex - 1));
   };
 
   const handleSubmit = async () => {
@@ -329,7 +339,6 @@ export function FormPreview() {
     // Simulate API call
     await new Promise((resolve) => setTimeout(resolve, 1500));
     
-    console.log('Form submitted:', formData);
     setSubmitted(true);
     setIsSubmitting(false);
   };
@@ -351,16 +360,17 @@ export function FormPreview() {
       const hasValidValue = value !== '' && value !== null && value !== undefined && 
         !(Array.isArray(value) && value.length === 0);
       
-      if (hasValidValue) {
+      if (hasValidValue && !isNavigating.current && !isTransitioning) {
+        isNavigating.current = true;
         // Small delay to show the selection before advancing
         setTimeout(() => {
           const nextIndex = getNextStepIndex();
           if (nextIndex === -1 || nextIndex >= form.steps.length) {
             handleSubmit();
           } else {
-            setCurrentStepIndex(nextIndex);
+            transitionToStep(nextIndex);
           }
-        }, 400);
+        }, 300);
       }
     }
   };
@@ -525,8 +535,13 @@ export function FormPreview() {
 
                 {/* Step Content */}
                 <div
+                  key={currentStep.id}
                   className="preview-step"
-                  style={{ flex: 1 }}
+                  style={{ 
+                    flex: 1,
+                    opacity: isTransitioning ? 0 : 1,
+                    transition: 'opacity 150ms ease-out',
+                  }}
                 >
                   <div style={{ position: 'relative', zIndex: 1 }}>
                   <h2

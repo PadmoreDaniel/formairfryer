@@ -436,13 +436,14 @@ export function generateThemeCSS(theme: Theme): string {
 }
 
 .wp-form-btn-back {
-  background-color: var(--wp-form-surface);
+  background-color: transparent;
   color: var(--wp-form-text);
-  border: var(--wp-form-border-width) var(--wp-form-border-style) var(--wp-form-border);
+  border: none;
 }
 
 .wp-form-btn-back:hover {
-  background-color: var(--wp-form-background);
+  background-color: transparent;
+  opacity: 0.7;
 }
 
 .wp-form .wp-form-btn.wp-form-btn-continue,
@@ -706,16 +707,12 @@ export function generateThemeCSS(theme: Theme): string {
   }
   
   .wp-form-navigation {
-    flex-direction: column;
+    flex-direction: row;
     gap: calc(var(--wp-form-spacing-unit) / 2);
   }
   
-  .wp-form-btn {
-    width: 100%;
-  }
-  
   .wp-form-btn-continue {
-    margin-left: 0;
+    margin-left: auto;
   }
   
   /* Adjust step title */
@@ -1419,6 +1416,9 @@ export function generateFormJS(form: Form): string {
             this.totalSteps = this.steps.length;
             this.shadowRoot = null; // Set externally after construction
             this.hostElement = null; // Set externally after construction
+            this.isNavigating = false; // Prevent double navigation
+            this.isSubmitting = false; // Prevent navigation during submission
+            this.autoNavTimeout = null; // Debounce timeout for auto-navigation
             
             log('FormHandler initialized', { totalSteps: this.totalSteps, config: formConfig });
             this.init();
@@ -1466,7 +1466,11 @@ export function generateFormJS(form: Form): string {
             this.form.on('change input', 'input, textarea, select', function() {
                 self.collectData();
                 self.evaluateConditionals();
-                self.checkAutoNavigation();
+                // Debounce auto-navigation check to prevent multiple triggers
+                clearTimeout(self.autoNavTimeout);
+                self.autoNavTimeout = setTimeout(function() {
+                    self.checkAutoNavigation();
+                }, 50);
             });
             
             // Checkbox and Radio styling - add 'selected' class for browser compatibility
@@ -2023,7 +2027,7 @@ export function generateFormJS(form: Form): string {
             const stepId = step.data('step-id');
             const stepConfig = stepsConfig.find(s => s.id === stepId);
             
-            if (!stepConfig || self.isSubmitting) return;
+            if (!stepConfig || self.isSubmitting || self.isNavigating) return;
             
             // Check conditional navigation
             const conditionalNav = stepConfig.conditionalNavigation || [];
@@ -2032,6 +2036,7 @@ export function generateFormJS(form: Form): string {
             for (const nav of sortedNav) {
                 if (this.evaluateCondition(nav.condition)) {
                     log('Auto-navigation triggered by condition:', nav);
+                    self.isNavigating = true;
                     
                     // Small delay to allow UI to update before navigation
                     setTimeout(function() {
@@ -2063,6 +2068,7 @@ export function generateFormJS(form: Form): string {
                 
                 if (hasValidValue) {
                     log('Auto-advance triggered for single question step:', stepConfig.title);
+                    self.isNavigating = true;
                     
                     // Small delay to show the selection before advancing
                     setTimeout(function() {
@@ -2116,13 +2122,22 @@ export function generateFormJS(form: Form): string {
             const self = this;
             log('Going to step', index);
             
+            // Prevent navigation if already navigating
+            if (self.isNavigating && self.currentStep !== index) {
+                // Already set by checkAutoNavigation, but set it just in case
+            }
+            self.isNavigating = true;
+            
             var currentStepEl = this.steps.eq(this.currentStep);
-            currentStepEl.animate({opacity: 0}, 200, function() {
+            currentStepEl.animate({opacity: 0}, 150, function() {
                 currentStepEl.css('display', 'none');
                 self.currentStep = index;
                 var step = self.steps.eq(self.currentStep);
                 var displayVal = step.hasClass('wp-form-step-flex') ? 'flex' : 'block';
-                step.css({display: displayVal, 'flex-direction': 'column', opacity: 0}).animate({opacity: 1}, 200);
+                step.css({display: displayVal, 'flex-direction': 'column', opacity: 0}).animate({opacity: 1}, 150, function() {
+                    // Reset navigation flag after animation completes
+                    self.isNavigating = false;
+                });
                 self.updateProgress();
                 self.evaluateConditionals();
                 
@@ -2204,6 +2219,7 @@ export function generateFormJS(form: Form): string {
                 return;
             }
             
+            this.isSubmitting = true;
             this.collectData();
             this.showLoading();
             
