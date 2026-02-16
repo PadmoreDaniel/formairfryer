@@ -393,8 +393,35 @@ export function FormPreview() {
   const handleSubmit = async () => {
     setIsSubmitting(true);
     
+    // Build final submission data with valuePrefixes applied
+    const submissionData = { ...formData };
+    form.steps.forEach((step) => {
+      step.questions.forEach((question) => {
+        if (question.valuePrefix) {
+          const fieldName = question.fieldName || question.id;
+          const currentValue = submissionData[fieldName];
+          if (currentValue !== undefined && currentValue !== null && currentValue !== '') {
+            // Handle arrays (checkboxes) - prefix each value
+            if (Array.isArray(currentValue)) {
+              submissionData[fieldName] = currentValue.map((v) => question.valuePrefix + v);
+            } else {
+              submissionData[fieldName] = question.valuePrefix + currentValue;
+            }
+          }
+        }
+      });
+    });
+    
+    console.log('[Preview] Form submission data:', submissionData);
+    
     // Simulate API call
     await new Promise((resolve) => setTimeout(resolve, 1500));
+    
+    // Check if we should skip thank you page and redirect immediately
+    if (form.submissionConfig.skipThankYouPage && form.submissionConfig.redirectOnSuccess) {
+      window.location.href = form.submissionConfig.redirectOnSuccess;
+      return;
+    }
     
     setSubmitted(true);
     setIsSubmitting(false);

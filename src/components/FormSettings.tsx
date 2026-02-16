@@ -158,6 +158,20 @@ export function FormSettings() {
               />
             </div>
 
+            {form.submissionConfig.redirectOnSuccess && (
+              <div className="form-group checkbox-group">
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={form.submissionConfig.skipThankYouPage || false}
+                    onChange={(e) => updateSubmissionConfig({ skipThankYouPage: e.target.checked })}
+                  />
+                  <span>Skip thank you page and redirect immediately</span>
+                </label>
+                <p className="hint">When enabled, users will be redirected without seeing the success message</p>
+              </div>
+            )}
+
             <h4 style={{ marginTop: '24px', marginBottom: '12px', borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>Custom Fields</h4>
             <p className="hint" style={{ marginBottom: '12px' }}>Add extra fields to include in the POST body</p>
             

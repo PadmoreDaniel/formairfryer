@@ -1298,9 +1298,7 @@ function generateQuestionHTML(question: Question, gridColumns: number): string {
       const content = escapePhpString(question.helperContent || '');
       return `
                 <div class="wp-form-field wp-form-helper-text" style="${style} text-align: ${alignment};" data-question-id="${questionId}">
-                    <div class="wp-form-helper-content" style="white-space: pre-wrap;">
-                        <?php echo esc_html('${content}'); ?>
-                    </div>
+                    <div class="wp-form-helper-content" style="white-space: pre-wrap;"><?php echo esc_html('${content}'); ?></div>
                 </div>`;
     }
     
@@ -1752,6 +1750,28 @@ export function generateFormJS(form: Form): string {
                 } else {
                     self.formData[name] = $el.val();
                 }
+            });
+            
+            // Apply valuePrefixes from question config
+            const stepsArray = Array.isArray(stepsConfig) ? stepsConfig : [];
+            stepsArray.forEach(function(step) {
+                const questions = Array.isArray(step.questions) ? step.questions : [];
+                questions.forEach(function(question) {
+                    if (question.valuePrefix) {
+                        const fieldName = question.fieldName || question.id;
+                        const currentValue = self.formData[fieldName];
+                        if (currentValue !== undefined && currentValue !== null && currentValue !== '') {
+                            // Handle arrays (checkboxes) - prefix each value
+                            if (Array.isArray(currentValue)) {
+                                self.formData[fieldName] = currentValue.map(function(v) {
+                                    return question.valuePrefix + v;
+                                });
+                            } else {
+                                self.formData[fieldName] = question.valuePrefix + currentValue;
+                            }
+                        }
+                    }
+                });
             });
             
             log('Data collected', this.formData);
@@ -2378,14 +2398,23 @@ export function generateFormJS(form: Form): string {
                         this.container.find('.wp-form-progress-fill').css('width', '100%');
                         this.container.find('.wp-form-progress-percentage').text('100%');
                         
+                        // Handle redirect if specified (check submissionConfig first, then response)
+                        const redirectUrl = submissionConfig.redirectOnSuccess || 
+                            (response && response.data && response.data.redirect);
+                        
+                        // Skip thank you page and redirect immediately if configured
+                        if (submissionConfig.skipThankYouPage && redirectUrl) {
+                            log('Skipping thank you page, redirecting immediately to', redirectUrl);
+                            window.location.href = redirectUrl;
+                            return;
+                        }
+                        
                         // Show success message
                         this.form.fadeOut(200, () => {
                             this.container.find('.wp-form-success').fadeIn(200);
                         });
                         
-                        // Handle redirect if specified (check submissionConfig first, then response)
-                        const redirectUrl = submissionConfig.redirectOnSuccess || 
-                            (response && response.data && response.data.redirect);
+                        // Handle redirect after showing success message
                         if (redirectUrl) {
                             log('Redirecting to', redirectUrl);
                             setTimeout(() => {

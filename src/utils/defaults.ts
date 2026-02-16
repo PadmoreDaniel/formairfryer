@@ -113,6 +113,7 @@ export const defaultSubmissionConfig: SubmissionConfig = {
   includeFields: 'all',
   successMessage: 'Thank you! Your submission has been received.',
   errorMessage: 'Something went wrong. Please try again.',
+  skipThankYouPage: false,
   customFields: [],
   successIcon: '✅',
   successBackgroundColor: '',

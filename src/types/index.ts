@@ -47,6 +47,7 @@ export interface Question {
   label: string;
   hideLabel?: boolean; // Option to hide label even if label text exists
   fieldName?: string; // Custom field name for form output (defaults to id if not set)
+  valuePrefix?: string; // Custom text to prepend to the answer value on submission (e.g., "How can your advisor best help you? ")
   placeholder?: string;
   helpText?: string;
   defaultValue?: string;
@@ -277,6 +278,7 @@ export interface SubmissionConfig {
   errorMessage: string;
   redirectOnSuccess?: string;
   redirectOnError?: string;
+  skipThankYouPage?: boolean; // If true, redirect immediately without showing thank you page
   // Custom fields to include in the POST body
   customFields?: CustomField[];
   // Success screen customization

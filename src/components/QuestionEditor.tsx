@@ -127,6 +127,17 @@ export function QuestionEditor() {
           <span className="form-hint">Used as the field name when submitting the form</span>
         </div>
 
+        <div className="form-group">
+          <label>Value Prefix (optional)</label>
+          <input
+            type="text"
+            value={selectedQuestion.valuePrefix || ''}
+            onChange={(e) => updateQuestion({ valuePrefix: e.target.value })}
+            placeholder="e.g., How can your advisor best help you? "
+          />
+          <span className="form-hint">Text prepended to the answer in the submitted value</span>
+        </div>
+
         {selectedQuestion.type !== 'hidden' && (
           <div className="form-group">
             <label>Placeholder</label>
