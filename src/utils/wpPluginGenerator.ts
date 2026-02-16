@@ -1371,6 +1371,18 @@ export function generateFormJS(form: Form): string {
         if (debug) console.log('[WP-Form]', ...args);
     }
     
+    // Data Layer Event Helper
+    function sendDataLayerEvent(eventName, data) {
+        if (!eventName || !eventName.trim()) return;
+        
+        window.dataLayer = window.dataLayer || [];
+        window.dataLayer.push({
+            event: eventName,
+            ...data
+        });
+        log('Data Layer Event fired:', eventName, data);
+    }
+    
     // Log initial config load
     log('=== Form Config Debug ===');
     log('Raw config object:', config);
@@ -2401,6 +2413,15 @@ export function generateFormJS(form: Form): string {
                         // Handle redirect if specified (check submissionConfig first, then response)
                         const redirectUrl = submissionConfig.redirectOnSuccess || 
                             (response && response.data && response.data.redirect);
+                        
+                        // Send data layer event if configured
+                        if (submissionConfig.dataLayerEventName) {
+                            sendDataLayerEvent(submissionConfig.dataLayerEventName, {
+                                formId: formConfig.id || '${form.id}',
+                                formName: formConfig.name || '${escapePhpString(form.name)}',
+                                formData: mergedFormData
+                            });
+                        }
                         
                         // Skip thank you page and redirect immediately if configured
                         if (submissionConfig.skipThankYouPage && redirectUrl) {

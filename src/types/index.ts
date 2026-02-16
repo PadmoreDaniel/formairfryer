@@ -285,6 +285,8 @@ export interface SubmissionConfig {
   successIcon?: string; // Emoji or icon for success screen
   successBackgroundColor?: string; // Background color for success screen
   successTextColor?: string; // Text color for success message
+  // Data Layer tracking
+  dataLayerEventName?: string; // Optional: Google Tag Manager data layer event name to fire on submission
 }
 
 // ==================== Form ====================

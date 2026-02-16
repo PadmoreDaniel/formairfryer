@@ -172,6 +172,17 @@ export function FormSettings() {
               </div>
             )}
 
+            <div className="form-group">
+              <label>Data Layer Event Name (optional)</label>
+              <input
+                type="text"
+                value={form.submissionConfig.dataLayerEventName || ''}
+                onChange={(e) => updateSubmissionConfig({ dataLayerEventName: e.target.value })}
+                placeholder="e.g., form_submission"
+              />
+              <span className="hint">Google Tag Manager event name to fire on successful submission (before redirect)</span>
+            </div>
+
             <h4 style={{ marginTop: '24px', marginBottom: '12px', borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>Custom Fields</h4>
             <p className="hint" style={{ marginBottom: '12px' }}>Add extra fields to include in the POST body</p>
             

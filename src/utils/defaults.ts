@@ -118,6 +118,7 @@ export const defaultSubmissionConfig: SubmissionConfig = {
   successIcon: '✅',
   successBackgroundColor: '',
   successTextColor: '',
+  dataLayerEventName: '',
 };
 
 // Default Plugin Settings

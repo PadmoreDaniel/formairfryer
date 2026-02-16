@@ -417,6 +417,20 @@ export function FormPreview() {
     // Simulate API call
     await new Promise((resolve) => setTimeout(resolve, 1500));
     
+    // Send data layer event if configured
+    if (form.submissionConfig.dataLayerEventName) {
+      if (typeof window !== 'undefined') {
+        (window as any).dataLayer = (window as any).dataLayer || [];
+        (window as any).dataLayer.push({
+          event: form.submissionConfig.dataLayerEventName,
+          formId: form.id,
+          formName: form.name,
+          formData: submissionData
+        });
+        console.log('[Preview] Data Layer Event fired:', form.submissionConfig.dataLayerEventName);
+      }
+    }
+    
     // Check if we should skip thank you page and redirect immediately
     if (form.submissionConfig.skipThankYouPage && form.submissionConfig.redirectOnSuccess) {
       window.location.href = form.submissionConfig.redirectOnSuccess;
