@@ -164,10 +164,18 @@ class ${toPascalCase(pluginSettings.pluginSlug)}_Plugin {
      * This only tells WP about the script — it won't be loaded until wp_enqueue_script() is called.
      */
     public function register_scripts() {
+${pluginSettings.sentryDsn ? `        // Register Sentry Browser SDK
         wp_register_script(
+            '${pluginSettings.pluginSlug}-sentry',
+            'https://browser.sentry-cdn.com/8.49.0/bundle.min.js',
+            array(),
+            '8.49.0',
+            true
+        );
+` : ''}        wp_register_script(
             '${pluginSettings.pluginSlug}-handler',
             ${pluginSettings.pluginSlug.toUpperCase().replace(/-/g, '_')}_PLUGIN_URL . 'assets/js/form-handler.js',
-            array('jquery'),
+            array('jquery'${pluginSettings.sentryDsn ? `, '${pluginSettings.pluginSlug}-sentry'` : ''}),
             ${pluginSettings.pluginSlug.toUpperCase().replace(/-/g, '_')}_VERSION . '.' . time(),
             true
         );
@@ -199,7 +207,8 @@ class ${toPascalCase(pluginSettings.pluginSlug)}_Plugin {
             'cssContent' => $css_content,
             'pluginSlug' => '${pluginSettings.pluginSlug}',
             'debug' => true,
-            'configPath' => ${pluginSettings.pluginSlug.toUpperCase().replace(/-/g, '_')}_PLUGIN_DIR . 'form-config.json'
+            'configPath' => ${pluginSettings.pluginSlug.toUpperCase().replace(/-/g, '_')}_PLUGIN_DIR . 'form-config.json'${pluginSettings.sentryDsn ? `,
+            'sentryDsn' => '${pluginSettings.sentryDsn.replace(/\\/g, '\\\\\\\\').replace(/'/g, "\\\\'")}'` : ''}
         ));
     }
     

@@ -1364,7 +1364,47 @@ export function generateFormJS(form: Form): string {
     const progressConfig = formConfig.progressConfig || { enabled: true, mode: 'linear', position: 'top' };
     const stepsConfig = formConfig.steps || [];
     const submissionConfig = formConfig.submissionConfig || {};
-    
+    ${pluginSettings.sentryDsn ? `
+    // Initialize Sentry error monitoring
+    const sentryDsn = config.sentryDsn || '';
+    if (sentryDsn && typeof Sentry !== 'undefined') {
+        Sentry.init({
+            dsn: sentryDsn,
+            allowUrls: [/${pluginSettings.pluginSlug.replace(/-/g, '\\\\-')}/]
+        });
+    }
+
+    function logError(error, errorInfo) {
+        if (!sentryDsn || typeof Sentry === 'undefined') return;
+        Sentry.withScope(function(scope) {
+            if (errorInfo) scope.setExtras(errorInfo);
+            Sentry.captureException(error instanceof Error ? error : new Error(String(error)));
+        });
+    }
+
+    function onError(error) {
+        var errorInfo = {};
+        var message = error.toString();
+
+        if (typeof window !== 'undefined' && window.location && window.location.href) {
+            errorInfo.pageUrl = window.location.href;
+        }
+
+        if (!(error instanceof Error) && error.message) {
+            errorInfo = error;
+            if (typeof window !== 'undefined' && window.location && window.location.href) {
+                errorInfo.pageUrl = window.location.href;
+            }
+            message = error.message;
+            error = new Error(message);
+        } else if (error.config && error.config.url) {
+            errorInfo.url = error.config.url;
+        }
+
+        logError(error, errorInfo);
+        console.error('[WP-Form] ERROR:', message);
+    }
+` : ''}
     // Debug logging (enabled for troubleshooting)
     const debug = true;
     function log(...args) {
@@ -2451,7 +2491,8 @@ export function generateFormJS(form: Form): string {
                 },
                 error: (xhr, status, error) => {
                     this.hideLoading();
-                    log('Submit error', status, error, xhr.responseText);
+                    log('Submit error', status, error, xhr.responseText);${pluginSettings.sentryDsn ? `
+                    onError(new Error('Form submission failed: ' + status + ' ' + error));` : ''}
                     this.showError('An error occurred while submitting the form. Please check your connection and try again.');
                 }
             });
@@ -2532,7 +2573,7 @@ export function generateFormJS(form: Form): string {
             }
             hostElement.dataset.wpFormInitialized = 'true';
             
-            // Initialize Shadow DOM
+            ${pluginSettings.sentryDsn ? 'try {' : ''}// Initialize Shadow DOM
             const shadowRoot = initializeShadowDOM(hostElement);
             if (!shadowRoot) {
                 console.error('[WP-Form] Failed to initialize Shadow DOM');
@@ -2548,7 +2589,11 @@ export function generateFormJS(form: Form): string {
                 log('FormHandler attached to Shadow DOM');
             } else {
                 console.error('[WP-Form] Form container not found in Shadow DOM');
-            }
+            }${pluginSettings.sentryDsn ? `
+            } catch (e) {
+                onError(e);
+                console.error('[WP-Form] Critical error during form initialization:', e);
+            }` : ''}
         });
     });
     

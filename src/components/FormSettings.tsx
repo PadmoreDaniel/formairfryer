@@ -408,6 +408,19 @@ export function FormSettings() {
                 </span>
               </div>
             )}
+
+            <h4 style={{ marginTop: '24px', marginBottom: '12px', borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>Error Monitoring</h4>
+
+            <div className="form-group">
+              <label>Sentry DSN (optional)</label>
+              <input
+                type="text"
+                value={form.pluginSettings.sentryDsn || ''}
+                onChange={(e) => updatePluginSettings({ sentryDsn: e.target.value })}
+                placeholder="https://examplePublicKey@o0.ingest.sentry.io/0"
+              />
+              <span className="hint">Provide a Sentry DSN to enable error monitoring. Critical errors during form rendering and submission will be reported to Sentry.</span>
+            </div>
           </div>
         )}
       </div>

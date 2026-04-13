@@ -316,6 +316,7 @@ export interface PluginSettings {
   shortcode: string;
   menuLocation: 'settings' | 'tools' | 'toplevel';
   menuIcon?: string;
+  sentryDsn?: string;
 }
 
 // ==================== Builder State ====================
