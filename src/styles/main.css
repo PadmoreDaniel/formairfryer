@@ -1183,7 +1183,8 @@ body {
 }
 
 .option-label-input,
-.option-value-input {
+.option-value-input,
+.option-image-input {
   flex: 1;
   padding: var(--spacing-sm);
   background: var(--color-bg);

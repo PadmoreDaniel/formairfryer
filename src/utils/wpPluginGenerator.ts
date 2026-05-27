@@ -234,6 +234,14 @@ export function generateThemeCSS(theme: Theme): string {
   color: var(--wp-form-text-muted);
 }
 
+.wp-form-field-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  margin-bottom: 8px;
+  display: block;
+}
+
 .wp-form-field-error {
   font-size: 0.875em;
   color: var(--wp-form-error);
@@ -348,12 +356,25 @@ export function generateThemeCSS(theme: Theme): string {
   transform: translate(-50%, -50%) !important;
   display: block !important;
 }
-}
 
 .wp-form-option-label {
   font-weight: 500;
   color: var(--wp-form-text);
   flex: 1;
+}
+
+.wp-form-option-has-image {
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.wp-form-option-image {
+  max-width: 100%;
+  max-height: 80px;
+  object-fit: contain;
+  border-radius: 4px;
+  margin-bottom: 4px;
 }
 
 /* Rating */
@@ -986,7 +1007,7 @@ $instance_id = '${escapePhpString(pluginSettings.pluginSlug)}-' . uniqid();
 ?>
 
 <!-- Shadow DOM Host Container -->
-<div class="wp-form-shadow-host" 
+<div class="wp-form-host-v2" 
      id="<?php echo esc_attr($instance_id); ?>" 
      data-plugin-slug="${escapePhpString(pluginSettings.pluginSlug)}"
      data-form-id="<?php echo esc_attr('${escapePhpString(form.id)}'); ?>"
@@ -1151,8 +1172,9 @@ function generateQuestionHTML(question: Question, gridColumns: number): string {
     case 'radio':
       inputHTML = `<div class="wp-form-options">
                     ${question.options?.map(opt => `
-                    <label class="wp-form-option">
+                    <label class="wp-form-option${opt.imageUrl ? ' wp-form-option-has-image' : ''}">
                         <input type="radio" name="${fieldName}" value="${escapePhpString(opt.value)}" ${required ? 'required' : ''}>
+                        ${opt.imageUrl ? `<img src="<?php echo esc_url('${escapePhpString(opt.imageUrl)}'); ?>" alt="<?php echo esc_attr('${escapePhpString(opt.label)}'); ?>" class="wp-form-option-image">` : ''}
                         <span class="wp-form-option-label"><?php echo esc_html('${escapePhpString(opt.label)}'); ?></span>
                     </label>`).join('') || ''}
                 </div>`;
@@ -1306,12 +1328,18 @@ function generateQuestionHTML(question: Question, gridColumns: number): string {
       inputHTML = `<input type="text" class="wp-form-field-input" name="${fieldName}" id="${questionId}">`;
   }
   
+  const imageUrl = question.imageUrl ? escapePhpString(question.imageUrl) : '';
+  const imagePosition = question.imagePosition || 'above';
+  const imageHTML = imageUrl ? `<img src="<?php echo esc_url('${imageUrl}'); ?>" alt="" class="wp-form-field-image">` : '';
+  
   return `
                 <div class="wp-form-field" style="${style}" data-question-id="${questionId}" ${question.conditionalDisplay ? `data-conditional='${JSON.stringify(question.conditionalDisplay).replace(/'/g, "&#39;")}'` : ''}>
+                    ${imagePosition === 'above' ? imageHTML : ''}
                     ${!hideLabel ? `<label class="wp-form-field-label" for="${questionId}">
                         <?php echo esc_html('${label}'); ?>
                         ${required ? '<span class="wp-form-field-required">*</span>' : ''}
                     </label>` : ''}
+                    ${imagePosition === 'below' ? imageHTML : ''}
                     ${inputHTML}
                     ${question.helpText ? `<span class="wp-form-field-help"><?php echo esc_html('${helpText}'); ?></span>` : ''}
                     <span class="wp-form-field-error" style="display: none;"></span>
@@ -1354,8 +1382,10 @@ export function generateFormJS(form: Form): string {
     const config = window.${configVar} || {};
     // PHP now returns formConfig as the form object directly (not wrapped in {version, exportedAt, form})
     const formConfig = config.formConfig || {};
-    // CSS content passed from PHP for Shadow DOM injection
+    // CSS content passed from PHP for Shadow DOM injection (fallback)
     const cssContent = config.cssContent || '';
+    // CSS file URL for <link> loading in Shadow DOM (preferred method)
+    const cssUrl = config.cssUrl || '';
     const pluginSlug = config.pluginSlug || '${pluginSettings.pluginSlug}';
     
     // Check if config loaded properly
@@ -1430,6 +1460,7 @@ export function generateFormJS(form: Form): string {
     log('formConfig:', formConfig);
     log('Config loaded properly:', configLoaded);
     log('Progress mode:', progressConfig.mode);
+    log('CSS URL:', cssUrl || 'Not set');
     log('CSS content loaded:', cssContent.length > 0 ? 'Yes (' + cssContent.length + ' bytes)' : 'No');
     
     // Check for errors from PHP
@@ -1809,8 +1840,19 @@ export function generateFormJS(form: Form): string {
             stepsArray.forEach(function(step) {
                 const questions = Array.isArray(step.questions) ? step.questions : [];
                 questions.forEach(function(question) {
+                    const fieldName = question.fieldName || question.id;
+                    
+                    // Convert privacy_policy checkbox to boolean if booleanValue is enabled
+                    if (question.type === 'privacy_policy' && question.booleanValue) {
+                        const currentValue = self.formData[fieldName];
+                        if (Array.isArray(currentValue)) {
+                            self.formData[fieldName] = currentValue.length > 0;
+                        } else {
+                            self.formData[fieldName] = !!currentValue;
+                        }
+                    }
+                    
                     if (question.valuePrefix) {
-                        const fieldName = question.fieldName || question.id;
                         const currentValue = self.formData[fieldName];
                         if (currentValue !== undefined && currentValue !== null && currentValue !== '') {
                             // Handle arrays (checkboxes) - prefix each value
@@ -2542,11 +2584,21 @@ export function generateFormJS(form: Form): string {
         const shadowRoot = hostElement.attachShadow({ mode: 'open' });
         
         // Inject CSS into Shadow DOM (complete isolation from WP themes)
-        if (cssContent) {
+        // Prefer <link> element (loads from URL - more robust, avoids wp_localize_script encoding issues)
+        // Fall back to inline <style> if URL not available
+        if (cssUrl) {
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = cssUrl;
+            shadowRoot.appendChild(link);
+            log('CSS loaded via <link> in Shadow DOM:', cssUrl);
+        } else if (cssContent) {
             const style = document.createElement('style');
             style.textContent = cssContent;
             shadowRoot.appendChild(style);
-            log('CSS injected into Shadow DOM');
+            log('CSS injected inline into Shadow DOM');
+        } else {
+            console.warn('[WP-Form] No CSS content or URL available - form will have no styling');
         }
         
         // Clone and append form content from template
@@ -2564,8 +2616,9 @@ export function generateFormJS(form: Form): string {
     $(document).ready(function() {
         log('Initializing form handlers with Shadow DOM');
         
-        // Find all shadow host containers
-        document.querySelectorAll('.wp-form-shadow-host').forEach(function(hostElement) {
+        // Find ONLY shadow host containers that belong to THIS plugin (by data-plugin-slug)
+        // This prevents multiple plugins on the same page from initializing each other's forms
+        document.querySelectorAll('.wp-form-host-v2[data-plugin-slug="' + pluginSlug + '"]').forEach(function(hostElement) {
             // Check if already initialized
             if (hostElement.dataset.wpFormInitialized) {
                 log('Form already initialized, skipping');

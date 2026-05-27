@@ -160,6 +160,33 @@ export function QuestionEditor() {
           />
         </div>
 
+        {selectedQuestion.type !== 'hidden' && selectedQuestion.type !== 'helper_text' && (
+          <>
+            <div className="form-group">
+              <label>Image URL (optional)</label>
+              <input
+                type="url"
+                value={selectedQuestion.imageUrl || ''}
+                onChange={(e) => updateQuestion({ imageUrl: e.target.value })}
+                placeholder="https://example.com/image.png"
+              />
+              <span className="form-hint">Display an image with this question</span>
+            </div>
+            {selectedQuestion.imageUrl && (
+              <div className="form-group">
+                <label>Image Position</label>
+                <select
+                  value={selectedQuestion.imagePosition || 'above'}
+                  onChange={(e) => updateQuestion({ imagePosition: e.target.value as 'above' | 'below' })}
+                >
+                  <option value="above">Above label</option>
+                  <option value="below">Below label</option>
+                </select>
+              </div>
+            )}
+          </>
+        )}
+
         {['date', 'datetime'].includes(selectedQuestion.type) && (
           <div className="form-group checkbox-group">
             <label className="toggle-label">
@@ -209,6 +236,17 @@ export function QuestionEditor() {
                 placeholder="https://example.com/privacy-policy"
               />
               <span className="form-hint">Link to your privacy policy page</span>
+            </div>
+            <div className="form-group">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={selectedQuestion.booleanValue || false}
+                  onChange={(e) => updateQuestion({ booleanValue: e.target.checked })}
+                />
+                Submit as boolean (true/false)
+              </label>
+              <span className="form-hint">When enabled, submits as true/false instead of ["accepted"]</span>
             </div>
           </>
         )}
@@ -268,7 +306,7 @@ export function QuestionEditor() {
           
           <div className="options-list">
             {(selectedQuestion.options || []).map((option, index) => (
-              <div key={option.id} className="option-item">
+              <div key={option.id} className="option-item" style={{ flexWrap: 'wrap' }}>
                 <span className="option-number">{index + 1}</span>
                 <input
                   type="text"
@@ -292,6 +330,16 @@ export function QuestionEditor() {
                 >
                   ×
                 </button>
+                {['radio', 'checkbox'].includes(selectedQuestion.type) && (
+                  <input
+                    type="url"
+                    value={option.imageUrl || ''}
+                    onChange={(e) => handleUpdateOption(option.id, { imageUrl: e.target.value })}
+                    placeholder="Image URL (optional)"
+                    className="option-image-input"
+                    style={{ width: '100%', marginTop: '4px', marginLeft: '24px' }}
+                  />
+                )}
               </div>
             ))}
             {(!selectedQuestion.options || selectedQuestion.options.length === 0) && (

@@ -28,6 +28,7 @@ export interface QuestionOption {
   id: string;
   label: string;
   value: string;
+  imageUrl?: string;
 }
 
 export interface QuestionValidation {
@@ -50,11 +51,14 @@ export interface Question {
   valuePrefix?: string; // Custom text to prepend to the answer value on submission (e.g., "How can your advisor best help you? ")
   placeholder?: string;
   helpText?: string;
+  imageUrl?: string; // Image URL to display with the question (above or below label)
+  imagePosition?: 'above' | 'below'; // Position of the image relative to the label
   defaultValue?: string;
   options?: QuestionOption[]; // For radio, checkbox, select
   validation: QuestionValidation;
   privacyPolicyUrl?: string; // URL for privacy policy link (for privacy_policy type)
   privacyPolicyText?: string; // Text displayed next to the checkbox (for privacy_policy type)
+  booleanValue?: boolean; // For privacy_policy type: submit as true/false instead of ["accepted"]
   useDateInputMask?: boolean; // For date fields: use text input with mask instead of date picker (better for mobile)
   textAlignment?: 'left' | 'center' | 'right'; // For helper_text type: text alignment
   helperContent?: string; // For helper_text type: the display text content

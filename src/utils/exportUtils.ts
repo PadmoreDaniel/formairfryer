@@ -191,25 +191,37 @@ ${pluginSettings.sentryDsn ? `        // Register Sentry Browser SDK
         
         $form_config = $this->get_form_config();
         
-        // Load CSS content for Shadow DOM injection
-        $css_file = ${pluginSettings.pluginSlug.toUpperCase().replace(/-/g, '_')}_PLUGIN_DIR . 'assets/css/form-styles.css';
-        $css_content = file_exists($css_file) ? file_get_contents($css_file) : '';
+        // CSS file URL for <link> loading in Shadow DOM (preferred - avoids wp_localize_script encoding issues)
+        $css_url = ${pluginSettings.pluginSlug.toUpperCase().replace(/-/g, '_')}_PLUGIN_URL . 'assets/css/form-styles.css';
         
         // Debug: log what we're passing to JS
         if (defined('WP_DEBUG') && WP_DEBUG) {
             error_log('WP Form Config: ' . print_r($form_config, true));
         }
         
-        wp_localize_script('${pluginSettings.pluginSlug}-handler', '${toCamelCase(pluginSettings.pluginSlug)}Config', array(
+        $localize_data = array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('${pluginSettings.pluginSlug}_nonce'),
             'formConfig' => $form_config,
-            'cssContent' => $css_content,
+            'cssUrl' => $css_url,
             'pluginSlug' => '${pluginSettings.pluginSlug}',
             'debug' => true,
             'configPath' => ${pluginSettings.pluginSlug.toUpperCase().replace(/-/g, '_')}_PLUGIN_DIR . 'form-config.json'${pluginSettings.sentryDsn ? `,
             'sentryDsn' => '${pluginSettings.sentryDsn.replace(/\\/g, '\\\\\\\\').replace(/'/g, "\\\\'")}'` : ''}
-        ));
+        );
+        
+        // Only include inline CSS content as fallback if URL approach might fail
+        // Passing large CSS through wp_localize_script can cause JSON encoding issues
+        // that break the entire config object (killing autoAdvance, colors, etc.)
+        $css_file = ${pluginSettings.pluginSlug.toUpperCase().replace(/-/g, '_')}_PLUGIN_DIR . 'assets/css/form-styles.css';
+        if (file_exists($css_file)) {
+            $css_content = file_get_contents($css_file);
+            if ($css_content !== false && strlen($css_content) < 50000) {
+                $localize_data['cssContent'] = $css_content;
+            }
+        }
+        
+        wp_localize_script('${pluginSettings.pluginSlug}-handler', '${toCamelCase(pluginSettings.pluginSlug)}Config', $localize_data);
     }
     
     public function add_admin_menu() {

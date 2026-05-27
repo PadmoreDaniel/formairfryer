@@ -873,6 +873,7 @@ function QuestionField({
                   onChange={(e) => onChange(e.target.value)}
                   style={{ border: `${theme.borders.width}px solid ${value === option.value ? theme.colors.primary : theme.colors.border}` }}
                 />
+                {option.imageUrl && <img src={option.imageUrl} alt={option.label} style={{ maxWidth: '100%', maxHeight: '80px', objectFit: 'contain', borderRadius: '4px' }} />}
                 <span>{option.label}</span>
               </label>
             ))}
@@ -1261,11 +1262,17 @@ function QuestionField({
 
   return (
     <div className={`question-field ${error ? 'has-error' : ''}`}>
+      {question.imageUrl && question.imagePosition !== 'below' && (
+        <img src={question.imageUrl} alt="" className="question-image" style={{ maxWidth: '100%', height: 'auto', borderRadius: '4px', marginBottom: '8px' }} />
+      )}
       {!question.hideLabel && (
         <label className="question-label" style={{ color: theme.colors.text }}>
           {question.label}
           {question.validation.required && <span className="required-star">*</span>}
         </label>
+      )}
+      {question.imageUrl && question.imagePosition === 'below' && (
+        <img src={question.imageUrl} alt="" className="question-image" style={{ maxWidth: '100%', height: 'auto', borderRadius: '4px', marginBottom: '8px' }} />
       )}
       {renderField()}
       {question.helpText && (
