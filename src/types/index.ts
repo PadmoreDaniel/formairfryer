@@ -78,6 +78,8 @@ export type ConditionOperator =
   | 'not_contains'
   | 'greater_than'
   | 'less_than'
+  | 'age_greater_than'
+  | 'age_less_than'
   | 'is_empty'
   | 'is_not_empty'
   | 'starts_with'
@@ -294,6 +296,34 @@ export interface SubmissionConfig {
   successTextColor?: string; // Text color for success message
   // Data Layer tracking
   dataLayerEventName?: string; // Optional: Google Tag Manager data layer event name to fire on submission
+  // Conditional post-submission redirects
+  postSubmissionRules?: PostSubmissionRedirectRule[];
+}
+
+// ==================== Post-Submission Redirect Rules ====================
+export interface ApiResponseRedirectMapping {
+  value: string; // Response value to match (e.g. "Declined")
+  url: string; // Redirect URL for this value
+}
+
+export interface PostSubmissionRedirectTarget {
+  type: 'url' | 'api';
+  url: string; // Direct redirect URL (for 'url' type) or API endpoint (for 'api' type)
+  apiConfig?: {
+    method: 'GET' | 'POST';
+    headers?: Record<string, string>;
+    bodyTemplate?: string; // JSON template with {{fieldName}} placeholders
+    redirectField: string; // JSON path to extract value from response (e.g. "risk")
+    responseRedirectMap?: ApiResponseRedirectMapping[]; // Map response values to redirect URLs
+    defaultRedirectUrl?: string; // Fallback URL if no mapping matches
+  };
+}
+
+export interface PostSubmissionRedirectRule {
+  id: string;
+  priority: number;
+  condition: Condition;
+  target: PostSubmissionRedirectTarget;
 }
 
 // ==================== Form ====================

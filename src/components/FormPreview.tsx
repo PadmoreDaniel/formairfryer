@@ -10,7 +10,7 @@ export function FormPreview() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [isTransitioning] = useState(false);
   const isNavigating = useRef(false);
   const pendingStepIndex = useRef<number | null>(null);
 
@@ -50,21 +50,12 @@ export function FormPreview() {
     }
   }, [currentStep, currentStepIndex, form, formData]);
 
-  // Smooth step transition function
+  // Step transition function
   const transitionToStep = (newIndex: number) => {
     if (isTransitioning) return;
-    setIsTransitioning(true);
-    pendingStepIndex.current = newIndex;
-    // Wait for fade out, then change step
-    setTimeout(() => {
-      setCurrentStepIndex(newIndex);
-      pendingStepIndex.current = null;
-      // Allow fade in to complete before enabling interactions
-      setTimeout(() => {
-        setIsTransitioning(false);
-        isNavigating.current = false;
-      }, 150);
-    }, 150);
+    setCurrentStepIndex(newIndex);
+    pendingStepIndex.current = null;
+    isNavigating.current = false;
   };
 
   // Auto-navigate when conditional navigation is triggered by form data changes
@@ -124,7 +115,17 @@ export function FormPreview() {
   };
 
   const evaluateRule = (rule: ConditionRule): boolean => {
-    const value = formData[rule.questionId] || '';
+    // Resolve questionId to the actual field key used in formData
+    let fieldKey = rule.questionId;
+    for (const step of form.steps) {
+      const q = step.questions.find((q) => q.id === rule.questionId);
+      if (q) {
+        fieldKey = q.fieldName || q.id;
+        break;
+      }
+    }
+    
+    const value = formData[fieldKey] || '';
     const compareValue = rule.value;
 
     // Handle array values (from checkbox fields)
@@ -166,6 +167,30 @@ export function FormPreview() {
         return Number(value) > Number(compareValue);
       case 'less_than':
         return Number(value) < Number(compareValue);
+      case 'age_greater_than':
+      case 'age_less_than': {
+        // Calculate age from a date value (supports YYYY-MM-DD, DD/MM/YYYY)
+        let dob: Date | null = null;
+        const dateStr = String(value);
+        if (dateStr.includes('/')) {
+          const parts = dateStr.split('/');
+          if (parts.length === 3) {
+            dob = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+          }
+        } else {
+          dob = new Date(dateStr);
+        }
+        if (!dob || isNaN(dob.getTime())) return false;
+        const today = new Date();
+        let age = today.getFullYear() - dob.getFullYear();
+        const m = today.getMonth() - dob.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+          age--;
+        }
+        return rule.operator === 'age_greater_than'
+          ? age > Number(compareValue)
+          : age < Number(compareValue);
+      }
       case 'starts_with':
         if (isArray) {
           return value.some((v: string) => String(v).startsWith(compareValue));
@@ -431,6 +456,88 @@ export function FormPreview() {
       }
     }
     
+    // Evaluate post-submission redirect rules (priority order, first match wins)
+    const postRules = form.submissionConfig.postSubmissionRules || [];
+    if (postRules.length > 0) {
+      const sortedRules = [...postRules].sort((a, b) => b.priority - a.priority);
+      for (const rule of sortedRules) {
+        if (rule.condition.rules.length === 0 || evaluateCondition(rule.condition)) {
+          if (rule.target.type === 'url' && rule.target.url) {
+            console.log('[Preview] Post-submission rule matched, redirecting to:', rule.target.url);
+            if (form.submissionConfig.skipThankYouPage) {
+              window.location.href = rule.target.url;
+              return;
+            }
+            // Show success then redirect
+            setSubmitted(true);
+            setIsSubmitting(false);
+            setTimeout(() => { window.location.href = rule.target.url; }, 2000);
+            return;
+          } else if (rule.target.type === 'api' && rule.target.url) {
+            console.log('[Preview] Post-submission API rule matched, calling:', rule.target.url);
+            try {
+              // Build request body with variable interpolation
+              let body: string | undefined;
+              if (rule.target.apiConfig?.method !== 'GET' && rule.target.apiConfig?.bodyTemplate) {
+                body = rule.target.apiConfig.bodyTemplate.replace(
+                  /\{\{(\w+)\}\}/g,
+                  (_, field) => submissionData[field] ?? ''
+                );
+              }
+              const response = await fetch(rule.target.url, {
+                method: rule.target.apiConfig?.method || 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(rule.target.apiConfig?.headers || {}),
+                },
+                ...(body ? { body } : {}),
+              });
+              const data = await response.json();
+              // Extract value from response using dot-notation path
+              const responseValue = rule.target.apiConfig?.redirectField
+                ?.split('.')
+                .reduce((obj: any, key: string) => obj?.[key], data);
+              
+              if (responseValue) {
+                // Check if there's a response-to-URL mapping
+                const mappings = rule.target.apiConfig?.responseRedirectMap || [];
+                const matchedMapping = mappings.find(
+                  (m) => m.value === String(responseValue)
+                );
+                
+                let finalRedirectUrl: string | undefined;
+                if (matchedMapping) {
+                  finalRedirectUrl = matchedMapping.url;
+                  console.log('[Preview] API response mapped:', responseValue, '→', finalRedirectUrl);
+                } else if (String(responseValue).startsWith('http')) {
+                  // If the response value itself is a URL, use it directly
+                  finalRedirectUrl = String(responseValue);
+                  console.log('[Preview] API returned direct redirect URL:', finalRedirectUrl);
+                } else {
+                  // No mapping matched, use default
+                  finalRedirectUrl = rule.target.apiConfig?.defaultRedirectUrl;
+                  console.log('[Preview] No mapping matched for:', responseValue, '- using default:', finalRedirectUrl);
+                }
+                
+                if (finalRedirectUrl) {
+                  if (form.submissionConfig.skipThankYouPage) {
+                    window.location.href = finalRedirectUrl;
+                    return;
+                  }
+                  setSubmitted(true);
+                  setIsSubmitting(false);
+                  setTimeout(() => { window.location.href = finalRedirectUrl!; }, 2000);
+                  return;
+                }
+              }
+            } catch (err) {
+              console.error('[Preview] Post-submission API call failed:', err);
+            }
+          }
+        }
+      }
+    }
+    
     // Check if we should skip thank you page and redirect immediately
     if (form.submissionConfig.skipThankYouPage && form.submissionConfig.redirectOnSuccess) {
       window.location.href = form.submissionConfig.redirectOnSuccess;
@@ -637,8 +744,6 @@ export function FormPreview() {
                   className="preview-step"
                   style={{ 
                     flex: 1,
-                    opacity: isTransitioning ? 0 : 1,
-                    transition: 'opacity 150ms ease-out',
                   }}
                 >
                   <div style={{ position: 'relative', zIndex: 1 }}>
@@ -653,9 +758,9 @@ export function FormPreview() {
                     {currentStep.title}
                   </h2>
                   {currentStep.description && (
-                    <p className="step-description" style={{ color: theme.colors.textMuted, textAlign: (currentStep.contentAlignment as any) || 'left' }}>
-                      {currentStep.description}
-                    </p>
+                    <p className="step-description" style={{ color: theme.colors.textMuted, textAlign: (currentStep.contentAlignment as any) || 'left' }}
+                      dangerouslySetInnerHTML={{ __html: currentStep.description.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>') }}
+                    />
                   )}
 
                   <div
@@ -759,7 +864,7 @@ export function FormPreview() {
                         }),
                       }}
                     >
-                      {isSubmitting ? 'Submitting...' : isLastStep ? 'Submit' : currentStep.continueButton.label}
+                      {isSubmitting ? 'Submitting...' : isLastStep ? (currentStep.continueButton.label || 'Submit') : currentStep.continueButton.label}
                     </button>
                   )}
                 </div>

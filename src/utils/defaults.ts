@@ -11,6 +11,7 @@ import {
   QuestionValidation,
   Condition,
   ConditionalNavigation,
+  PostSubmissionRedirectRule,
 } from '../types';
 
 // Generate unique IDs
@@ -290,6 +291,14 @@ export const createConditionalNavigation = (): ConditionalNavigation => ({
   condition: createCondition(),
   target: { type: 'next' },
   priority: 0,
+});
+
+// Create post-submission redirect rule
+export const createPostSubmissionRule = (): PostSubmissionRedirectRule => ({
+  id: generateId(),
+  priority: 0,
+  condition: createCondition(),
+  target: { type: 'url', url: '' },
 });
 
 // Question type metadata

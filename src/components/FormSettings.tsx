@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useBuilder } from '../context/BuilderContext';
+import { PostSubmissionRulesEditor } from './PostSubmissionRulesEditor';
 
 export function FormSettings() {
   const { state, dispatch } = useBuilder();
@@ -311,6 +312,8 @@ export function FormSettings() {
                 />
               </div>
             </div>
+
+            <PostSubmissionRulesEditor />
           </div>
         )}
 

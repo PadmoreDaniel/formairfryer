@@ -189,6 +189,13 @@ export function generateThemeCSS(theme: Theme): string {
   margin-bottom: var(--wp-form-section-gap);
   display: block !important;
 }
+.wp-form-step-description a {
+  color: var(--wp-form-text-muted);
+  text-decoration: underline;
+}
+.wp-form-step-description a:hover {
+  opacity: 0.8;
+}
 
 /* Step Content Alignment */
 .wp-form-step-align-center .wp-form-step-title,
@@ -1142,7 +1149,7 @@ function generateStepHTML(step: Step, index: number, totalSteps: number, theme: 
   const stepTitle = escapePhpString(step.title);
   const stepDesc = escapePhpString(step.description || '');
   const backLabel = escapePhpString(step.backButton.label);
-  const continueLabel = escapePhpString(isLast ? 'Submit' : step.continueButton.label);
+  const continueLabel = escapePhpString(isLast ? (step.continueButton.label || 'Submit') : step.continueButton.label);
   const alignment = step.contentAlignment || 'left';
   const alignClass = alignment !== 'left' ? ` wp-form-step-align-${alignment}` : '';
   const titleInlineStyle = alignment !== 'left' ? ` style="text-align: ${alignment} !important; display: block !important;"` : '';
@@ -1183,7 +1190,7 @@ function generateStepHTML(step: Step, index: number, totalSteps: number, theme: 
   return `
         <div class="wp-form-step${alignClass}${minHeightClass}${activeClass}" data-step="${index}" data-step-id="${escapePhpString(step.id)}"${stepStyleAttr}>${overlayHtml}${contentWrapOpen}
             <h2 class="wp-form-step-title"${titleInlineStyle}><?php echo esc_html('${stepTitle}'); ?></h2>
-            ${step.description ? `<p class="wp-form-step-description"${descInlineStyle}><?php echo esc_html('${stepDesc}'); ?></p>` : ''}
+            ${step.description ? `<p class="wp-form-step-description"${descInlineStyle}><?php echo wp_kses('${stepDesc.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')}', array('a' => array('href' => array(), 'target' => array(), 'rel' => array()))); ?></p>` : ''}
             
             <div class="wp-form-questions" style="grid-template-columns: repeat(${step.gridColumns}, 1fr); gap: ${step.gridGap}px;">
                 ${step.questions.map(q => generateQuestionHTML(q, step.gridColumns)).join('\n                ')}
@@ -2237,7 +2244,20 @@ export function generateFormJS(form: Form): string {
         evaluateRule(rule) {
             if (!rule || !rule.questionId) return true;
             
-            const value = this.formData[rule.questionId] || '';
+            // Resolve questionId to the actual field name used in formData
+            // Fields use fieldName if set, otherwise fall back to question id
+            let fieldKey = rule.questionId;
+            const stepsArray = Array.isArray(stepsConfig) ? stepsConfig : [];
+            for (const step of stepsArray) {
+                const questions = Array.isArray(step.questions) ? step.questions : [];
+                const q = questions.find(q => q.id === rule.questionId);
+                if (q) {
+                    fieldKey = q.fieldName || q.id;
+                    break;
+                }
+            }
+            
+            const value = this.formData[fieldKey] || '';
             const compareValue = rule.value || '';
             
             // Handle array values (from checkbox fields)
@@ -2277,6 +2297,30 @@ export function generateFormJS(form: Form): string {
                     return value && value !== '';
                 case 'greater_than': return Number(value) > Number(compareValue);
                 case 'less_than': return Number(value) < Number(compareValue);
+                case 'age_greater_than':
+                case 'age_less_than': {
+                    // Calculate age from a date value (supports YYYY-MM-DD, DD/MM/YYYY)
+                    let dob = null;
+                    const dateStr = String(value);
+                    if (dateStr.includes('/')) {
+                        const parts = dateStr.split('/');
+                        if (parts.length === 3) {
+                            dob = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+                        }
+                    } else {
+                        dob = new Date(dateStr);
+                    }
+                    if (!dob || isNaN(dob.getTime())) return false;
+                    const today = new Date();
+                    let age = today.getFullYear() - dob.getFullYear();
+                    const m = today.getMonth() - dob.getMonth();
+                    if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+                        age--;
+                    }
+                    return rule.operator === 'age_greater_than'
+                        ? age > Number(compareValue)
+                        : age < Number(compareValue);
+                }
                 case 'starts_with':
                     if (isArray) {
                         return value.some(v => String(v).startsWith(compareValue));
@@ -2576,7 +2620,7 @@ export function generateFormJS(form: Form): string {
                         this.container.find('.wp-form-progress-percentage').text('100%');
                         
                         // Handle redirect if specified (check submissionConfig first, then response)
-                        const redirectUrl = submissionConfig.redirectOnSuccess || 
+                        const defaultRedirectUrl = submissionConfig.redirectOnSuccess || 
                             (response && response.data && response.data.redirect);
                         
                         // Send data layer event if configured
@@ -2588,10 +2632,123 @@ export function generateFormJS(form: Form): string {
                             });
                         }
                         
+                        // Evaluate post-submission redirect rules (priority order, first match wins)
+                        const postRules = submissionConfig.postSubmissionRules || [];
+                        if (postRules.length > 0) {
+                            const sortedRules = [...postRules].sort((a, b) => b.priority - a.priority);
+                            let ruleMatched = false;
+                            
+                            const processRuleRedirect = (url) => {
+                                if (submissionConfig.skipThankYouPage) {
+                                    log('Post-submission rule: skipping thank you, redirecting to', url);
+                                    window.location.href = url;
+                                } else {
+                                    this.form.fadeOut(200, () => {
+                                        this.container.find('.wp-form-success').fadeIn(200);
+                                    });
+                                    log('Post-submission rule: showing success then redirecting to', url);
+                                    setTimeout(() => { window.location.href = url; }, 2000);
+                                }
+                            };
+                            
+                            for (const rule of sortedRules) {
+                                if (rule.condition.rules.length === 0 || this.evaluateCondition(rule.condition)) {
+                                    ruleMatched = true;
+                                    
+                                    if (rule.target.type === 'url' && rule.target.url) {
+                                        processRuleRedirect(rule.target.url);
+                                        return;
+                                    } else if (rule.target.type === 'api' && rule.target.url) {
+                                        // Make secondary API call to determine redirect
+                                        const apiConfig = rule.target.apiConfig || {};
+                                        let apiBody = null;
+                                        if (apiConfig.method !== 'GET' && apiConfig.bodyTemplate) {
+                                            apiBody = apiConfig.bodyTemplate.replace(
+                                                /\\{\\{(\\w+)\\}\\}/g,
+                                                (_, field) => mergedFormData[field] || ''
+                                            );
+                                        }
+                                        
+                                        $.ajax({
+                                            url: rule.target.url,
+                                            type: apiConfig.method || 'POST',
+                                            data: apiBody,
+                                            contentType: 'application/json',
+                                            headers: apiConfig.headers || {},
+                                            success: (apiResponse) => {
+                                                log('Post-submission API response', apiResponse);
+                                                // Extract value from response using dot-notation path
+                                                const redirectField = apiConfig.redirectField || '';
+                                                let responseValue = apiResponse;
+                                                if (redirectField) {
+                                                    const parts = redirectField.split('.');
+                                                    for (const part of parts) {
+                                                        responseValue = responseValue && responseValue[part];
+                                                    }
+                                                }
+                                                
+                                                if (responseValue) {
+                                                    // Check response-to-URL mapping
+                                                    const mappings = apiConfig.responseRedirectMap || [];
+                                                    const matchedMapping = mappings.find(m => m.value === String(responseValue));
+                                                    
+                                                    let finalUrl = null;
+                                                    if (matchedMapping) {
+                                                        finalUrl = matchedMapping.url;
+                                                        log('API response mapped:', responseValue, '->', finalUrl);
+                                                    } else if (typeof responseValue === 'string' && responseValue.startsWith('http')) {
+                                                        // Response value is a direct URL
+                                                        finalUrl = responseValue;
+                                                        log('API returned direct redirect URL:', finalUrl);
+                                                    } else {
+                                                        // No mapping matched, use default from apiConfig or global default
+                                                        finalUrl = apiConfig.defaultRedirectUrl || defaultRedirectUrl;
+                                                        log('No mapping matched for:', responseValue, '- using default:', finalUrl);
+                                                    }
+                                                    
+                                                    if (finalUrl) {
+                                                        processRuleRedirect(finalUrl);
+                                                    } else {
+                                                        this.form.fadeOut(200, () => {
+                                                            this.container.find('.wp-form-success').fadeIn(200);
+                                                        });
+                                                    }
+                                                } else {
+                                                    log('Post-submission API: no value at field path, using default');
+                                                    if (defaultRedirectUrl) {
+                                                        processRuleRedirect(defaultRedirectUrl);
+                                                    } else {
+                                                        this.form.fadeOut(200, () => {
+                                                            this.container.find('.wp-form-success').fadeIn(200);
+                                                        });
+                                                    }
+                                                }
+                                            },
+                                            error: (xhr, status, err) => {
+                                                log('Post-submission API error', status, err);
+                                                // Fall back to default redirect or success
+                                                if (defaultRedirectUrl) {
+                                                    processRuleRedirect(defaultRedirectUrl);
+                                                } else {
+                                                    this.form.fadeOut(200, () => {
+                                                        this.container.find('.wp-form-success').fadeIn(200);
+                                                    });
+                                                }
+                                            }
+                                        });
+                                        return;
+                                    }
+                                    break;
+                                }
+                            }
+                            
+                            if (ruleMatched) return;
+                        }
+                        
                         // Skip thank you page and redirect immediately if configured
-                        if (submissionConfig.skipThankYouPage && redirectUrl) {
-                            log('Skipping thank you page, redirecting immediately to', redirectUrl);
-                            window.location.href = redirectUrl;
+                        if (submissionConfig.skipThankYouPage && defaultRedirectUrl) {
+                            log('Skipping thank you page, redirecting immediately to', defaultRedirectUrl);
+                            window.location.href = defaultRedirectUrl;
                             return;
                         }
                         
@@ -2601,10 +2758,10 @@ export function generateFormJS(form: Form): string {
                         });
                         
                         // Handle redirect after showing success message
-                        if (redirectUrl) {
-                            log('Redirecting to', redirectUrl);
+                        if (defaultRedirectUrl) {
+                            log('Redirecting to', defaultRedirectUrl);
                             setTimeout(() => {
-                                window.location.href = redirectUrl;
+                                window.location.href = defaultRedirectUrl;
                             }, 2000);
                         }
                     } else {

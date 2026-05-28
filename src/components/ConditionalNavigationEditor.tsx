@@ -46,6 +46,8 @@ export function ConditionalNavigationEditor() {
     { value: 'is_not_empty', label: 'is not empty' },
     { value: 'greater_than', label: 'is greater than' },
     { value: 'less_than', label: 'is less than' },
+    { value: 'age_greater_than', label: 'age is greater than' },
+    { value: 'age_less_than', label: 'age is less than' },
   ];
 
   // Get all questions from current and previous steps
