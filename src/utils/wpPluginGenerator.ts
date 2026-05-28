@@ -2520,27 +2520,23 @@ export function generateFormJS(form: Form): string {
             self.isNavigating = true;
             
             var currentStepEl = this.steps.eq(this.currentStep);
-            currentStepEl.animate({opacity: 0}, 150, function() {
-                currentStepEl.css('display', 'none').removeClass('wp-form-step-active');
-                self.currentStep = index;
-                var step = self.steps.eq(self.currentStep);
-                var displayVal = step.hasClass('wp-form-step-flex') ? 'flex' : 'block';
-                step.addClass('wp-form-step-active').css({display: displayVal, 'flex-direction': 'column', opacity: 0}).animate({opacity: 1}, 150, function() {
-                    // Reset navigation flag after animation completes
-                    self.isNavigating = false;
-                });
-                self.updateProgress();
-                self.evaluateConditionals();
-                
-                // Only scroll if the form is out of view (above viewport)
-                const formTop = self.container.offset().top;
-                const viewportTop = $(window).scrollTop();
-                if (formTop < viewportTop) {
-                    $('html, body').animate({
-                        scrollTop: formTop - 50
-                    }, 300);
-                }
-            });
+            currentStepEl.css('display', 'none').removeClass('wp-form-step-active');
+            self.currentStep = index;
+            var step = self.steps.eq(self.currentStep);
+            var displayVal = step.hasClass('wp-form-step-flex') ? 'flex' : 'block';
+            step.addClass('wp-form-step-active').css({display: displayVal, 'flex-direction': 'column', opacity: 1});
+            self.isNavigating = false;
+            self.updateProgress();
+            self.evaluateConditionals();
+            
+            // Only scroll if the form is out of view (above viewport)
+            const formTop = self.container.offset().top;
+            const viewportTop = $(window).scrollTop();
+            if (formTop < viewportTop) {
+                $('html, body').animate({
+                    scrollTop: formTop - 50
+                }, 300);
+            }
         }
         
         updateProgress() {

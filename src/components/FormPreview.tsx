@@ -682,7 +682,9 @@ export function FormPreview() {
               overflow: 'hidden',
               border: `${theme.borders.width}px ${theme.borders.style} ${theme.colors.border}`,
               position: 'relative',
-              ...(currentStep.minHeight ? { minHeight: currentStep.minHeight, display: 'flex', flexDirection: 'column' as const } : {}),
+              display: 'flex',
+              flexDirection: 'column' as const,
+              ...(currentStep.minHeight ? { minHeight: currentStep.minHeight } : {}),
               ...(currentStep.backgroundImage?.url ? {
                 backgroundImage: `url(${currentStep.backgroundImage.url})`,
                 backgroundSize: currentStep.backgroundImage.size || 'cover',
@@ -740,7 +742,6 @@ export function FormPreview() {
 
                 {/* Step Content */}
                 <div
-                  key={currentStep.id}
                   className="preview-step"
                   style={{ 
                     flex: 1,

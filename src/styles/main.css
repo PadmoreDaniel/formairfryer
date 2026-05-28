@@ -2148,7 +2148,7 @@ body {
 
 .preview-form {
   flex: 1;
-  overflow-y: auto;
+  overflow-y: scroll;
   padding: var(--spacing-xl);
   background: var(--color-bg-lighter);
 }
@@ -2172,7 +2172,6 @@ body {
 .preview-step {
   padding: 0;
   color: inherit;
-  overflow: hidden;
 }
 
 .preview-step .step-title {
