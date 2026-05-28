@@ -354,6 +354,7 @@ export interface PluginSettings {
   menuLocation: 'settings' | 'tools' | 'toplevel';
   menuIcon?: string;
   sentryDsn?: string;
+  showSkeleton?: boolean;
 }
 
 // ==================== Builder State ====================

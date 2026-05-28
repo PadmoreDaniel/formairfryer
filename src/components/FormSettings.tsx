@@ -424,6 +424,20 @@ export function FormSettings() {
               />
               <span className="hint">Provide a Sentry DSN to enable error monitoring. Critical errors during form rendering and submission will be reported to Sentry.</span>
             </div>
+
+            <h4 style={{ marginTop: '24px', marginBottom: '12px', borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>Loading</h4>
+
+            <div className="form-group">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={form.pluginSettings.showSkeleton || false}
+                  onChange={(e) => updatePluginSettings({ showSkeleton: e.target.checked })}
+                />
+                Show skeleton loader on page load
+              </label>
+              <span className="hint">Displays a placeholder skeleton that mirrors Step 1 while the form JavaScript loads. Prevents layout shift.</span>
+            </div>
           </div>
         )}
       </div>

@@ -1054,6 +1054,42 @@ function darkenColor(color: string, percent: number): string {
   return '#' + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1);
 }
 
+// Generate skeleton loader HTML that mirrors Step 1's layout
+function generateSkeletonHTML(form: Form): string {
+  const step1 = form.steps[0];
+  if (!step1) return '';
+  
+  const theme = form.theme;
+  const padding = theme.spacing.formPadding || 32;
+  const borderRadius = theme.borders.radius || 16;
+  const bgColor = theme.colors.surface || '#f9f9f9';
+  const shimmerColor = theme.colors.border || '#e1e1df';
+  
+  // Determine question placeholders based on step 1 questions
+  let questionsPlaceholder = '';
+  for (const q of step1.questions) {
+    if (q.type === 'radio') {
+      const optionCount = q.options?.length || 3;
+      questionsPlaceholder += `<div style="display:grid;grid-template-columns:1fr;gap:8px;margin-top:16px;">`;
+      for (let i = 0; i < optionCount; i++) {
+        questionsPlaceholder += `<div style="height:52px;background:${shimmerColor};border-radius:${borderRadius}px;animation:wp-skel-shimmer 1.5s infinite ease-in-out;animation-delay:${0.1 * i}s;"></div>`;
+      }
+      questionsPlaceholder += `</div>`;
+    } else {
+      questionsPlaceholder += `<div style="height:48px;width:100%;background:${shimmerColor};border-radius:${theme.inputs.borderRadius || 8}px;margin-top:16px;animation:wp-skel-shimmer 1.5s infinite ease-in-out;"></div>`;
+    }
+  }
+  
+  return `
+    <style>@keyframes wp-skel-shimmer{0%,100%{opacity:1}50%{opacity:.5}}</style>
+    <div style="padding:${padding}px;border-radius:${borderRadius}px;background:${bgColor};border:1px solid ${shimmerColor};font-family:${theme.typography.fontFamily};box-sizing:border-box;">
+      <div style="height:28px;width:55%;background:${shimmerColor};border-radius:6px;margin-bottom:10px;animation:wp-skel-shimmer 1.5s infinite ease-in-out;"></div>
+      ${step1.description ? `<div style="height:16px;width:35%;background:${shimmerColor};border-radius:4px;margin-bottom:20px;animation:wp-skel-shimmer 1.5s infinite ease-in-out;animation-delay:.1s;"></div>` : ''}
+      ${questionsPlaceholder}
+      <div style="display:flex;"><div style="height:48px;width:100px;background:${shimmerColor};border-radius:${theme.buttons.borderRadius || 8}px;margin-left:auto;margin-top:24px;animation:wp-skel-shimmer 1.5s infinite ease-in-out;animation-delay:.3s;"></div></div>
+    </div>`;
+}
+
 // Generate Form HTML Template (for Shadow DOM)
 export function generateFormHTML(form: Form): string {
   const { pluginSettings, steps, progressConfig } = form;
@@ -1097,6 +1133,7 @@ $instance_id = '${escapePhpString(pluginSettings.pluginSlug)}-' . uniqid();
 ?>
 
 <!-- Shadow DOM Host Container -->
+${pluginSettings.showSkeleton ? `<div id="<?php echo esc_attr($instance_id); ?>-skeleton">${generateSkeletonHTML(form)}</div>` : ''}
 <div class="wp-form-host-v2" 
      id="<?php echo esc_attr($instance_id); ?>" 
      data-plugin-slug="${escapePhpString(pluginSettings.pluginSlug)}"
@@ -2809,47 +2846,39 @@ export function generateFormJS(form: Form): string {
     /**
      * Initialize Shadow DOM for complete style isolation
      * This prevents WordPress theme CSS from affecting our form
+     * Returns { shadowRoot, cssReady } - form content is NOT appended yet
      */
     function initializeShadowDOM(hostElement) {
-        const instanceId = hostElement.id;
-        const templateId = instanceId + '-template';
-        const template = document.getElementById(templateId);
-        
-        if (!template) {
-            console.error('[WP-Form] Template not found:', templateId);
-            return null;
-        }
-        
         // Create Shadow DOM
         const shadowRoot = hostElement.attachShadow({ mode: 'open' });
         
         // Inject CSS into Shadow DOM (complete isolation from WP themes)
         // Prefer <link> element (loads from URL - more robust, avoids wp_localize_script encoding issues)
         // Fall back to inline <style> if URL not available
+        let cssReady;
         if (cssUrl) {
             const link = document.createElement('link');
             link.rel = 'stylesheet';
             link.href = cssUrl;
+            cssReady = new Promise(function(resolve) {
+                link.onload = resolve;
+                link.onerror = resolve; // Still show form even if CSS fails
+            });
             shadowRoot.appendChild(link);
             log('CSS loaded via <link> in Shadow DOM:', cssUrl);
         } else if (cssContent) {
             const style = document.createElement('style');
             style.textContent = cssContent;
             shadowRoot.appendChild(style);
+            cssReady = Promise.resolve();
             log('CSS injected inline into Shadow DOM');
         } else {
             console.warn('[WP-Form] No CSS content or URL available - form will have no styling');
+            cssReady = Promise.resolve();
         }
         
-        // Clone and append form content from template
-        const content = template.content.cloneNode(true);
-        shadowRoot.appendChild(content);
-        
-        // Remove the template from DOM (cleanup)
-        template.remove();
-        
-        log('Shadow DOM initialized for', instanceId);
-        return shadowRoot;
+        log('Shadow DOM initialized for', hostElement.id);
+        return { shadowRoot, cssReady };
     }
     
     // Initialize when DOM is ready - with Shadow DOM encapsulation
@@ -2866,23 +2895,51 @@ export function generateFormJS(form: Form): string {
             }
             hostElement.dataset.wpFormInitialized = 'true';
             
-            ${pluginSettings.sentryDsn ? 'try {' : ''}// Initialize Shadow DOM
-            const shadowRoot = initializeShadowDOM(hostElement);
-            if (!shadowRoot) {
+            ${pluginSettings.sentryDsn ? 'try {' : ''}
+            const instanceId = hostElement.id;
+            const templateId = instanceId + '-template';
+            const template = document.getElementById(templateId);
+            
+            if (!template) {
+                console.error('[WP-Form] Template not found:', templateId);
+                return;
+            }
+            
+            // Initialize Shadow DOM (attaches shadow, loads CSS, but does NOT append form content yet)
+            const result = initializeShadowDOM(hostElement);
+            if (!result) {
                 console.error('[WP-Form] Failed to initialize Shadow DOM');
                 return;
             }
             
-            // Find the form inside Shadow DOM and initialize handler
-            const formContainer = shadowRoot.querySelector('.wp-form-container');
-            if (formContainer) {
-                const handler = new FormHandler(formContainer);
-                handler.shadowRoot = shadowRoot;
-                handler.hostElement = hostElement;
-                log('FormHandler attached to Shadow DOM');
-            } else {
-                console.error('[WP-Form] Form container not found in Shadow DOM');
-            }${pluginSettings.sentryDsn ? `
+            const { shadowRoot, cssReady } = result;
+            
+            // Wait for CSS to fully load before appending form content (prevents FOUC)
+            cssReady.then(function() {
+                // NOW append the form content — CSS is ready so no flash
+                const content = template.content.cloneNode(true);
+                shadowRoot.appendChild(content);
+                template.remove();
+                
+                // Remove skeleton loader if present
+                const skeleton = document.getElementById(instanceId + '-skeleton');
+                if (skeleton) {
+                    skeleton.remove();
+                }
+                
+                // Initialize form handler
+                const formContainer = shadowRoot.querySelector('.wp-form-container');
+                if (formContainer) {
+                    const handler = new FormHandler(formContainer);
+                    handler.shadowRoot = shadowRoot;
+                    handler.hostElement = hostElement;
+                    log('FormHandler attached to Shadow DOM');
+                } else {
+                    console.error('[WP-Form] Form container not found in Shadow DOM');
+                }
+                
+                log('CSS ready, form rendered');
+            });${pluginSettings.sentryDsn ? `
             } catch (e) {
                 onError(e);
                 console.error('[WP-Form] Critical error during form initialization:', e);
