@@ -1,5 +1,5 @@
 import { Form, FormExport } from '../types';
-import { generateThemeCSS, generateFormHTML, generateFormJS } from './wpPluginGenerator';
+import { generateThemeCSS, generateFormHTML, generateFormJS, getGoogleFontsUrl } from './wpPluginGenerator';
 
 // Export form as JSON
 export function exportFormAsJSON(form: Form): string {
@@ -100,6 +100,7 @@ export async function downloadWordPressPlugin(form: Form) {
 // Generate main plugin PHP file
 function generateMainPluginFile(form: Form): string {
   const { pluginSettings } = form;
+  const googleFontsUrl = getGoogleFontsUrl(form.theme);
   
   return `<?php
 /**
@@ -164,7 +165,14 @@ class ${toPascalCase(pluginSettings.pluginSlug)}_Plugin {
      * This only tells WP about the script — it won't be loaded until wp_enqueue_script() is called.
      */
     public function register_scripts() {
-${pluginSettings.sentryDsn ? `        // Register Sentry Browser SDK
+${googleFontsUrl ? `        // Register Google Fonts
+        wp_register_style(
+            '${pluginSettings.pluginSlug}-google-fonts',
+            '${googleFontsUrl}',
+            array(),
+            null
+        );
+` : ''}${pluginSettings.sentryDsn ? `        // Register Sentry Browser SDK
         wp_register_script(
             '${pluginSettings.pluginSlug}-sentry',
             'https://browser.sentry-cdn.com/8.49.0/bundle.min.js',
@@ -188,7 +196,8 @@ ${pluginSettings.sentryDsn ? `        // Register Sentry Browser SDK
      */
     private function enqueue_form_scripts() {
         wp_enqueue_script('${pluginSettings.pluginSlug}-handler');
-        
+${googleFontsUrl ? `        wp_enqueue_style('${pluginSettings.pluginSlug}-google-fonts');
+` : ''}        
         $form_config = $this->get_form_config();
         
         // CSS file URL for <link> loading in Shadow DOM (preferred - avoids wp_localize_script encoding issues)
