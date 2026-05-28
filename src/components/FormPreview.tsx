@@ -710,6 +710,20 @@ export function FormPreview() {
                         fontSize: theme.buttons.fontSize,
                         fontWeight: theme.buttons.fontWeight,
                         textTransform: theme.buttons.textTransform,
+                        ...(currentStep.backButton.style === 'contained' ? {
+                          backgroundColor: theme.colors.primary,
+                          color: '#ffffff',
+                          border: 'none',
+                        } : currentStep.backButton.style === 'outlined' ? {
+                          backgroundColor: 'transparent',
+                          color: theme.colors.primary,
+                          border: `${theme.borders.width}px ${theme.borders.style} ${theme.colors.primary}`,
+                        } : {
+                          backgroundColor: 'transparent',
+                          color: theme.colors.text,
+                          border: 'none',
+                          opacity: 0.7,
+                        }),
                       }}
                     >
                       {currentStep.backButton.label}
@@ -729,8 +743,20 @@ export function FormPreview() {
                         fontSize: theme.buttons.fontSize,
                         fontWeight: theme.buttons.fontWeight,
                         textTransform: theme.buttons.textTransform,
-                        backgroundColor: theme.colors.primary,
-                        color: 'white',
+                        ...(currentStep.continueButton.style === 'outlined' ? {
+                          backgroundColor: 'transparent',
+                          color: theme.colors.primary,
+                          border: `${theme.borders.width}px ${theme.borders.style} ${theme.colors.primary}`,
+                        } : currentStep.continueButton.style === 'text' ? {
+                          backgroundColor: 'transparent',
+                          color: theme.colors.text,
+                          border: 'none',
+                          opacity: 0.7,
+                        } : {
+                          backgroundColor: theme.colors.primary,
+                          color: 'white',
+                          border: 'none',
+                        }),
                       }}
                     >
                       {isSubmitting ? 'Submitting...' : isLastStep ? 'Submit' : currentStep.continueButton.label}

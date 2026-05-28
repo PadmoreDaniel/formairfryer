@@ -112,9 +112,12 @@ export interface ConditionalNavigation {
   priority: number; // Higher priority rules are evaluated first
 }
 
+export type ButtonStyle = 'contained' | 'outlined' | 'text';
+
 export interface ButtonConfig {
   enabled: boolean;
   label: string;
+  style?: ButtonStyle;
   showIf?: Condition; // Condition to show the button
   enableIf?: Condition; // Condition to enable the button (if shown but might be disabled)
   customClass?: string;

@@ -136,11 +136,13 @@ export const defaultPluginSettings: PluginSettings = {
 export const defaultBackButton: ButtonConfig = {
   enabled: true,
   label: 'Back',
+  style: 'text',
 };
 
 export const defaultContinueButton: ButtonConfig = {
   enabled: true,
   label: 'Continue',
+  style: 'contained',
 };
 
 export const defaultSubmitButton: ButtonConfig = {

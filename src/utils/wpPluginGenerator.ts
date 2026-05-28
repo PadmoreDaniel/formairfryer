@@ -498,31 +498,78 @@ export function generateThemeCSS(theme: Theme): string {
   transform: none;
 }
 
-.wp-form-btn-back {
+/* Button Style: Contained (default for continue/submit) */
+.wp-form-btn-style-contained {
+  background: ${theme.colors.primary} !important;
+  background-color: ${theme.colors.primary} !important;
+  color: #ffffff !important;
+  border: none !important;
+}
+
+.wp-form-btn-style-contained:hover {
+  background: ${darkenColor(theme.colors.primary, 10)} !important;
+  background-color: ${darkenColor(theme.colors.primary, 10)} !important;
+}
+
+/* Button Style: Outlined */
+.wp-form-btn-style-outlined {
+  background: transparent !important;
+  background-color: transparent !important;
+  color: ${theme.colors.primary} !important;
+  border: ${theme.borders.width}px ${theme.borders.style} ${theme.colors.primary} !important;
+}
+
+.wp-form-btn-style-outlined:hover {
+  background: ${theme.colors.primary}10 !important;
+  background-color: ${theme.colors.primary}10 !important;
+}
+
+/* Button Style: Text */
+.wp-form-btn-style-text {
+  background: transparent !important;
+  background-color: transparent !important;
+  color: var(--wp-form-text) !important;
+  border: none !important;
+  opacity: 0.7;
+}
+
+.wp-form-btn-style-text:hover {
+  background: transparent !important;
+  opacity: 1;
+}
+
+/* Legacy back button fallback (no style class) */
+.wp-form-btn-back:not([class*="wp-form-btn-style"]) {
   background-color: transparent;
   color: var(--wp-form-text);
   border: none;
   opacity: 0.6;
 }
 
-.wp-form-btn-back:hover {
+.wp-form-btn-back:not([class*="wp-form-btn-style"]):hover {
   background-color: transparent;
   opacity: 1;
 }
 
-.wp-form .wp-form-btn.wp-form-btn-continue,
-.wp-form .wp-form-btn.wp-form-btn-submit {
+/* Legacy continue/submit fallback (no style class) */
+.wp-form .wp-form-btn.wp-form-btn-continue:not([class*="wp-form-btn-style"]),
+.wp-form .wp-form-btn.wp-form-btn-submit:not([class*="wp-form-btn-style"]) {
   background: ${theme.colors.primary} !important;
   background-color: ${theme.colors.primary} !important;
   color: #ffffff !important;
-  margin-left: auto;
   border: none !important;
 }
 
-.wp-form .wp-form-btn.wp-form-btn-continue:hover,
-.wp-form .wp-form-btn.wp-form-btn-submit:hover {
+.wp-form .wp-form-btn.wp-form-btn-continue:not([class*="wp-form-btn-style"]):hover,
+.wp-form .wp-form-btn.wp-form-btn-submit:not([class*="wp-form-btn-style"]):hover {
   background: ${darkenColor(theme.colors.primary, 10)} !important;
   background-color: ${darkenColor(theme.colors.primary, 10)} !important;
+}
+
+/* Continue/submit button positioning */
+.wp-form .wp-form-btn.wp-form-btn-continue,
+.wp-form .wp-form-btn.wp-form-btn-submit {
+  margin-left: auto;
 }
 
 /* Success State */
@@ -1144,13 +1191,13 @@ function generateStepHTML(step: Step, index: number, totalSteps: number, theme: 
             ${hasMinHeight ? '\n            <div class="wp-form-step-spacer" style="flex: 1 1 auto !important; min-height: 0;"></div>' : ''}
             <div class="wp-form-navigation"${alignment === 'center' ? ` style="justify-content: center !important;${navMarginTop}"` : alignment === 'right' ? ` style="justify-content: flex-end !important;${navMarginTop}"` : (navMarginTop ? ` style="${navMarginTop.trim()}"` : '')}>
                 ${step.backButton.enabled && !isFirst ? `
-                <button type="button" class="wp-form-btn wp-form-btn-back" data-action="back">
+                <button type="button" class="wp-form-btn wp-form-btn-back wp-form-btn-style-${step.backButton.style || 'text'}" data-action="back">
                     <?php echo esc_html('${backLabel}'); ?>
                 </button>
                 ` : (alignment !== 'center' && alignment !== 'right' ? '<div></div>' : '')}
                 
                 ${step.continueButton.enabled ? `
-                <button type="button" class="wp-form-btn ${isLast ? 'wp-form-btn-submit' : 'wp-form-btn-continue'}" data-action="${isLast ? 'submit' : 'continue'}" style="background: ${theme.colors.primary} !important; background-color: ${theme.colors.primary} !important; color: #ffffff !important; border: none !important;${alignment !== 'left' ? ' margin-left: 0 !important;' : ''}">
+                <button type="button" class="wp-form-btn ${isLast ? 'wp-form-btn-submit' : 'wp-form-btn-continue'} wp-form-btn-style-${step.continueButton.style || 'contained'}" data-action="${isLast ? 'submit' : 'continue'}"${alignment !== 'left' ? ' style="margin-left: 0 !important;"' : ''}>
                     <?php echo esc_html('${continueLabel}'); ?>
                 </button>
                 ` : ''}

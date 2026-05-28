@@ -550,6 +550,7 @@ export function StepEditor() {
               Show Back Button
             </label>
             {step.backButton.enabled && (
+              <>
               <input
                 type="text"
                 value={step.backButton.label}
@@ -567,6 +568,26 @@ export function StepEditor() {
                 placeholder="Button label"
                 className="nav-button-label-input"
               />
+              <select
+                value={step.backButton.style || 'text'}
+                onChange={(e) =>
+                  dispatch({
+                    type: 'UPDATE_STEP',
+                    payload: {
+                      stepId: step.id,
+                      updates: {
+                        backButton: { ...step.backButton, style: e.target.value as 'contained' | 'outlined' | 'text' },
+                      },
+                    },
+                  })
+                }
+                className="nav-button-style-select"
+              >
+                <option value="contained">Contained</option>
+                <option value="outlined">Outlined</option>
+                <option value="text">Text</option>
+              </select>
+              </>
             )}
           </div>
           
@@ -590,6 +611,7 @@ export function StepEditor() {
               Show Continue Button
             </label>
             {step.continueButton.enabled && (
+              <>
               <input
                 type="text"
                 value={step.continueButton.label}
@@ -607,6 +629,26 @@ export function StepEditor() {
                 placeholder="Button label"
                 className="nav-button-label-input"
               />
+              <select
+                value={step.continueButton.style || 'contained'}
+                onChange={(e) =>
+                  dispatch({
+                    type: 'UPDATE_STEP',
+                    payload: {
+                      stepId: step.id,
+                      updates: {
+                        continueButton: { ...step.continueButton, style: e.target.value as 'contained' | 'outlined' | 'text' },
+                      },
+                    },
+                  })
+                }
+                className="nav-button-style-select"
+              >
+                <option value="contained">Contained</option>
+                <option value="outlined">Outlined</option>
+                <option value="text">Text</option>
+              </select>
+              </>
             )}
           </div>
         </div>
