@@ -24,6 +24,27 @@ export interface SavedForm {
 const FORMS_COLLECTION = 'forms';
 
 /**
+ * Recursively remove `undefined` values, which Firestore rejects.
+ * Optional fields (e.g. defaultPrevStep set to "First previous step") are
+ * stored as `undefined` in state and must be stripped before saving.
+ */
+function stripUndefined<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripUndefined(item)) as unknown as T;
+  }
+  if (value && typeof value === 'object') {
+    const result: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+      if (val !== undefined) {
+        result[key] = stripUndefined(val);
+      }
+    }
+    return result as T;
+  }
+  return value;
+}
+
+/**
  * Save a form to Firestore
  */
 export async function saveForm(userId: string, form: Form): Promise<string> {
@@ -32,7 +53,7 @@ export async function saveForm(userId: string, form: Form): Promise<string> {
   
   await setDoc(formRef, {
     userId,
-    form,
+    form: stripUndefined(form),
     createdAt: now,
     updatedAt: now,
   });
@@ -47,7 +68,7 @@ export async function updateForm(formId: string, form: Form): Promise<void> {
   const formRef = doc(db, FORMS_COLLECTION, formId);
   
   await setDoc(formRef, {
-    form,
+    form: stripUndefined(form),
     updatedAt: Timestamp.now(),
   }, { merge: true });
 }

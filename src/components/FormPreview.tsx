@@ -14,6 +14,14 @@ export function FormPreview() {
   const [isTransitioning] = useState(false);
   const isNavigating = useRef(false);
   const pendingStepIndex = useRef<number | null>(null);
+  // Stack of step indices actually visited, used so the back button returns
+  // along the real path taken (e.g. after a conditional jump) rather than
+  // simply going to currentStepIndex - 1.
+  const stepHistory = useRef<number[]>([]);
+  // Auto-navigation only fires in response to a genuine user answer change,
+  // never merely because we landed on a step whose condition already matches
+  // (which previously trapped users when navigating back).
+  const autoNavArmed = useRef(false);
 
   const currentStep = form.steps[currentStepIndex] || form.steps[0];
   const isFirstStep = currentStepIndex === 0;
@@ -52,16 +60,27 @@ export function FormPreview() {
   }, [currentStep, currentStepIndex, form, formData]);
 
   // Step transition function
-  const transitionToStep = (newIndex: number) => {
+  const transitionToStep = (newIndex: number, options?: { isBack?: boolean }) => {
     if (isTransitioning) return;
+    // Record the step we're leaving on forward moves so the back button can
+    // retrace the actual path. Back moves consume the history instead.
+    if (!options?.isBack) {
+      stepHistory.current.push(currentStepIndex);
+    }
     setCurrentStepIndex(newIndex);
     pendingStepIndex.current = null;
     isNavigating.current = false;
+    // Any transition disarms auto-navigation until the user changes an answer.
+    autoNavArmed.current = false;
   };
 
   // Auto-navigate when conditional navigation is triggered by form data changes
   useEffect(() => {
     if (!currentStep || isSubmitting || submitted || isNavigating.current || isTransitioning) return;
+    // Only auto-navigate as a direct result of the user changing an answer.
+    // This prevents re-triggering when the user navigates back to a step whose
+    // condition is already satisfied by their previous answer.
+    if (!autoNavArmed.current) return;
 
     // Check if any conditional navigation rule is triggered
     const sortedNavigation = [...currentStep.conditionalNavigation].sort(
@@ -70,6 +89,7 @@ export function FormPreview() {
 
     for (const nav of sortedNavigation) {
       if (evaluateCondition(nav.condition)) {
+        autoNavArmed.current = false;
         isNavigating.current = true;
         // Small delay to allow UI to update before navigation
         setTimeout(async () => {
@@ -131,29 +151,33 @@ export function FormPreview() {
 
     // Handle array values (from checkbox fields)
     const isArray = Array.isArray(value);
+    // Case-insensitive comparison so option values (e.g. "NO") match rule
+    // values (e.g. "no") regardless of casing.
+    const cv = String(compareValue ?? '').toLowerCase();
+    const sv = String(value ?? '').toLowerCase();
     
     switch (rule.operator) {
       case 'equals':
         // For arrays (checkboxes), check if the array contains the value
         if (isArray) {
-          return value.includes(compareValue);
+          return value.some((v: string) => String(v).toLowerCase() === cv);
         }
-        return value === compareValue;
+        return sv === cv;
       case 'not_equals':
         if (isArray) {
-          return !value.includes(compareValue);
+          return !value.some((v: string) => String(v).toLowerCase() === cv);
         }
-        return value !== compareValue;
+        return sv !== cv;
       case 'contains':
         if (isArray) {
-          return value.some((v: string) => String(v).includes(compareValue));
+          return value.some((v: string) => String(v).toLowerCase().includes(cv));
         }
-        return String(value).includes(compareValue);
+        return sv.includes(cv);
       case 'not_contains':
         if (isArray) {
-          return !value.some((v: string) => String(v).includes(compareValue));
+          return !value.some((v: string) => String(v).toLowerCase().includes(cv));
         }
-        return !String(value).includes(compareValue);
+        return !sv.includes(cv);
       case 'is_empty':
         if (isArray) {
           return value.length === 0;
@@ -194,14 +218,14 @@ export function FormPreview() {
       }
       case 'starts_with':
         if (isArray) {
-          return value.some((v: string) => String(v).startsWith(compareValue));
+          return value.some((v: string) => String(v).toLowerCase().startsWith(cv));
         }
-        return String(value).startsWith(compareValue);
+        return sv.startsWith(cv);
       case 'ends_with':
         if (isArray) {
-          return value.some((v: string) => String(v).endsWith(compareValue));
+          return value.some((v: string) => String(v).toLowerCase().endsWith(cv));
         }
-        return String(value).endsWith(compareValue);
+        return sv.endsWith(cv);
       default:
         return true;
     }
@@ -265,6 +289,20 @@ export function FormPreview() {
           const numberPlateRegex = /^\d{2,3}-[A-Z]{1,2}-\d{1,6}$/;
           if (!numberPlateRegex.test(plateVal)) {
             newErrors[key] = 'Please enter a valid number plate (e.g. 191-D-12345)';
+          }
+        }
+        
+        // Year validation
+        if (question.type === 'year') {
+          const maxYear = question.maxYearCurrent
+            ? new Date().getFullYear()
+            : (question.maxYear ?? new Date().getFullYear());
+          const minYear = question.minYear ?? 1900;
+          const yr = Number(value);
+          if (!/^\d{4}$/.test(String(value)) || isNaN(yr)) {
+            newErrors[key] = 'Please enter a valid 4-digit year';
+          } else if (yr < minYear || yr > maxYear) {
+            newErrors[key] = `Please enter a year between ${minYear} and ${maxYear}`;
           }
         }
         
@@ -406,14 +444,21 @@ export function FormPreview() {
   const handleBack = () => {
     if (isTransitioning) return;
     isNavigating.current = true;
+    // An explicitly configured previous step always takes priority.
     if (currentStep.defaultPrevStep) {
       const targetIndex = form.steps.findIndex((s) => s.id === currentStep.defaultPrevStep);
       if (targetIndex !== -1) {
-        transitionToStep(targetIndex);
+        transitionToStep(targetIndex, { isBack: true });
         return;
       }
     }
-    transitionToStep(Math.max(0, currentStepIndex - 1));
+    // Otherwise retrace the actual navigation path.
+    if (stepHistory.current.length > 0) {
+      const prevIndex = stepHistory.current.pop()!;
+      transitionToStep(prevIndex, { isBack: true });
+      return;
+    }
+    transitionToStep(Math.max(0, currentStepIndex - 1), { isBack: true });
   };
 
   const handleSubmit = async () => {
@@ -561,6 +606,9 @@ export function FormPreview() {
 
   const handleInputChange = (question: Question, value: any) => {
     const key = question.fieldName || question.id;
+    // Arm auto-navigation: a user-driven answer change may now trigger a
+    // conditional navigation rule (see the auto-navigate effect).
+    autoNavArmed.current = true;
     setFormData((prev) => ({ ...prev, [key]: value }));
     if (errors[key]) {
       setErrors((prev) => {
@@ -607,6 +655,8 @@ export function FormPreview() {
     setFormData({});
     setErrors({});
     setSubmitted(false);
+    stepHistory.current = [];
+    autoNavArmed.current = false;
   };
 
   const closePreview = () => {
@@ -927,6 +977,18 @@ function QuestionField({
     border: `${theme.borders.width}px ${theme.borders.style} ${error ? theme.colors.error : theme.colors.border}`,
   };
 
+  // For radio options that allow custom text ("Other"): the option's stored
+  // value becomes the user's typed text. Track whether such an option is the
+  // active selection so the correct radio stays checked while typing.
+  const radioFixedValues = useMemo(
+    () => new Set((question.options || []).filter((o) => !o.allowCustomInput).map((o) => o.value)),
+    [question.options]
+  );
+  const hasCustomOption = (question.options || []).some((o) => o.allowCustomInput);
+  const [customOptionActive, setCustomOptionActive] = useState<boolean>(
+    () => hasCustomOption && value != null && value !== '' && !radioFixedValues.has(value)
+  );
+
   const renderField = () => {
     switch (question.type) {
       case 'text':
@@ -1003,23 +1065,88 @@ function QuestionField({
           />
         );
       
+      case 'year': {
+        const maxYear = question.maxYearCurrent
+          ? new Date().getFullYear()
+          : (question.maxYear ?? new Date().getFullYear());
+        const minYear = question.minYear ?? 1900;
+        if ((question.yearInputStyle || 'dropdown') === 'text') {
+          return (
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={4}
+              value={value || ''}
+              onChange={(e) => onChange(e.target.value.replace(/[^0-9]/g, ''))}
+              onKeyDown={onKeyDown}
+              placeholder={question.placeholder || 'e.g. 2021'}
+              style={inputStyle}
+            />
+          );
+        }
+        const years: number[] = [];
+        for (let y = maxYear; y >= minYear; y--) years.push(y);
+        return (
+          <select
+            value={value || ''}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={onKeyDown}
+            style={inputStyle}
+          >
+            <option value="">{question.placeholder || 'Select year...'}</option>
+            {years.map((y) => (
+              <option key={y} value={String(y)}>
+                {y}
+              </option>
+            ))}
+          </select>
+        );
+      }
+
       case 'radio':
         return (
           <div className="radio-group">
-            {question.options?.map((option) => (
-              <label key={option.id} className="radio-option" style={{ border: `${theme.borders.width}px ${theme.borders.style} ${value === option.value ? theme.colors.primary : theme.colors.border}` }}>
-                <input
-                  type="radio"
-                  name={question.id}
-                  value={option.value}
-                  checked={value === option.value}
-                  onChange={(e) => onChange(e.target.value)}
-                  style={{ border: `${theme.borders.width}px solid ${value === option.value ? theme.colors.primary : theme.colors.border}` }}
-                />
-                {option.imageUrl && <img src={option.imageUrl} alt={option.label} style={{ maxWidth: '100%', maxHeight: '80px', objectFit: 'contain', borderRadius: '4px' }} />}
-                <span>{option.label}</span>
-              </label>
-            ))}
+            {question.options?.map((option) => {
+              const isSelected = option.allowCustomInput
+                ? customOptionActive
+                : !customOptionActive && value === option.value;
+              return (
+                <React.Fragment key={option.id}>
+                  <label className="radio-option" style={{ border: `${theme.borders.width}px ${theme.borders.style} ${isSelected ? theme.colors.primary : theme.colors.border}` }}>
+                    <input
+                      type="radio"
+                      name={question.id}
+                      value={option.value}
+                      checked={isSelected}
+                      onChange={() => {
+                        if (option.allowCustomInput) {
+                          setCustomOptionActive(true);
+                          onChange('');
+                        } else {
+                          setCustomOptionActive(false);
+                          onChange(option.value);
+                        }
+                      }}
+                      style={{ border: `${theme.borders.width}px solid ${isSelected ? theme.colors.primary : theme.colors.border}` }}
+                    />
+                    {option.imageUrl && <img src={option.imageUrl} alt={option.label} style={{ maxWidth: '100%', maxHeight: '80px', objectFit: 'contain', borderRadius: '4px' }} />}
+                    <span>{option.label}</span>
+                  </label>
+                  {option.allowCustomInput && customOptionActive && (
+                    <input
+                      type="text"
+                      className="radio-other-input"
+                      value={value || ''}
+                      placeholder={question.placeholder || 'Please specify...'}
+                      onChange={(e) => onChange(e.target.value)}
+                      onKeyDown={onKeyDown}
+                      autoFocus
+                      style={{ ...inputStyle, marginTop: '8px' }}
+                    />
+                  )}
+                </React.Fragment>
+              );
+            })}
           </div>
         );
       

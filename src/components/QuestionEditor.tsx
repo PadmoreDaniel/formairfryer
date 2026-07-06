@@ -77,6 +77,7 @@ export function QuestionEditor() {
     date: 'Date',
     time: 'Time',
     datetime: 'Date & Time',
+    year: 'Year',
     file: 'File Upload',
     rating: 'Rating',
     slider: 'Slider',
@@ -201,6 +202,60 @@ export function QuestionEditor() {
               Replaces date picker with a text field using input mask (e.g., DD/MM/YYYY)
             </span>
           </div>
+        )}
+
+        {selectedQuestion.type === 'year' && (
+          <>
+            <div className="form-group">
+              <label>Input Style</label>
+              <select
+                value={selectedQuestion.yearInputStyle || 'dropdown'}
+                onChange={(e) => updateQuestion({ yearInputStyle: e.target.value as 'dropdown' | 'text' })}
+              >
+                <option value="dropdown">Dropdown</option>
+                <option value="text">Text input</option>
+              </select>
+              <span className="form-hint">Choose a year picker dropdown or a free-text field</span>
+            </div>
+            {(selectedQuestion.yearInputStyle || 'dropdown') === 'dropdown' && (
+              <>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Min Year</label>
+                    <input
+                      type="number"
+                      value={selectedQuestion.minYear ?? ''}
+                      onChange={(e) => updateQuestion({ minYear: e.target.value ? parseInt(e.target.value, 10) : undefined })}
+                      placeholder="1900"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Max Year</label>
+                    <input
+                      type="number"
+                      value={selectedQuestion.maxYearCurrent ? '' : (selectedQuestion.maxYear ?? '')}
+                      onChange={(e) => updateQuestion({ maxYear: e.target.value ? parseInt(e.target.value, 10) : undefined })}
+                      placeholder={String(new Date().getFullYear())}
+                      disabled={selectedQuestion.maxYearCurrent || false}
+                    />
+                  </div>
+                </div>
+                <div className="form-group checkbox-group">
+                  <label className="toggle-label">
+                    <input
+                      type="checkbox"
+                      checked={selectedQuestion.maxYearCurrent || false}
+                      onChange={(e) => updateQuestion({ maxYearCurrent: e.target.checked })}
+                    />
+                    <span className="toggle-text">Use current year as maximum</span>
+                  </label>
+                  <span className="form-hint" style={{ display: 'block', marginTop: '4px' }}>
+                    Keeps the newest selectable year in sync with the current year automatically
+                  </span>
+                </div>
+              </>
+            )}
+          </>
         )}
 
         {selectedQuestion.type === 'hidden' && (
@@ -339,6 +394,19 @@ export function QuestionEditor() {
                     className="option-image-input"
                     style={{ width: '100%', marginTop: '4px', marginLeft: '24px' }}
                   />
+                )}
+                {selectedQuestion.type === 'radio' && (
+                  <label
+                    className="toggle-label"
+                    style={{ width: '100%', marginTop: '4px', marginLeft: '24px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={option.allowCustomInput || false}
+                      onChange={(e) => handleUpdateOption(option.id, { allowCustomInput: e.target.checked })}
+                    />
+                    <span className="toggle-text">Allow custom text input (e.g. "Other")</span>
+                  </label>
                 )}
               </div>
             ))}

@@ -272,6 +272,23 @@ export function generateThemeCSS(theme: Theme): string {
   resize: vertical;
 }
 
+/* Native select: reset appearance and add a custom arrow so WordPress theme
+   styles don't override the form's look. */
+.wp-form .wp-form-field-select {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  background-color: var(--wp-form-surface) !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23505050' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right ${theme.inputs.paddingX}px center !important;
+  padding-right: ${theme.inputs.paddingX * 2 + 12}px !important;
+  border: var(--wp-form-border-width) var(--wp-form-border-style) var(--wp-form-border) !important;
+  border-radius: ${theme.inputs.borderRadius}px !important;
+  color: var(--wp-form-text) !important;
+  cursor: pointer;
+}
+
 .wp-form-field-help {
   font-size: 0.875em;
   color: var(--wp-form-text-muted);
@@ -1296,14 +1313,40 @@ function generateQuestionHTML(question: Question, gridColumns: number): string {
                     ${required ? 'required' : ''}></textarea>`;
       break;
     
+    case 'year': {
+      const minYear = question.minYear ?? 1900;
+      if ((question.yearInputStyle || 'dropdown') === 'text') {
+        inputHTML = `<input type="text" 
+                      class="wp-form-field-input" 
+                      name="${fieldName}" 
+                      id="${questionId}"
+                      inputmode="numeric"
+                      maxlength="4"
+                      pattern="\\d{4}"
+                      placeholder="<?php echo esc_attr('${placeholder || 'e.g. 2021'}'); ?>"
+                      ${required ? 'required' : ''}>`;
+      } else {
+        // Emit a PHP loop so the year range (and "current year" max) resolve at render time
+        const maxYearExpr = question.maxYearCurrent
+          ? "(int) date('Y')"
+          : String(question.maxYear ?? new Date().getFullYear());
+        inputHTML = `<select class="wp-form-field-select" name="${fieldName}" id="${questionId}" ${required ? 'required' : ''}>
+                    <option value=""><?php echo esc_html('${placeholder || 'Select year...'}'); ?></option>
+                    <?php for ($wpf_year = ${maxYearExpr}; $wpf_year >= ${minYear}; $wpf_year--) { echo '<option value="' . $wpf_year . '">' . $wpf_year . '</option>'; } ?>
+                </select>`;
+      }
+      break;
+    }
+    
     case 'radio':
       inputHTML = `<div class="wp-form-options">
                     ${question.options?.map(opt => `
                     <label class="wp-form-option${opt.imageUrl ? ' wp-form-option-has-image' : ''}">
-                        <input type="radio" name="${fieldName}" value="${escapePhpString(opt.value)}" ${required ? 'required' : ''}>
+                        <input type="radio" name="${fieldName}" value="${escapePhpString(opt.value)}" ${required ? 'required' : ''}${opt.allowCustomInput ? ' data-other-option="true"' : ''}>
                         ${opt.imageUrl ? `<img src="<?php echo esc_url('${escapePhpString(opt.imageUrl)}'); ?>" alt="<?php echo esc_attr('${escapePhpString(opt.label)}'); ?>" class="wp-form-option-image">` : ''}
                         <span class="wp-form-option-label"><?php echo esc_html('${escapePhpString(opt.label)}'); ?></span>
-                    </label>`).join('') || ''}
+                    </label>${opt.allowCustomInput ? `
+                    <input type="text" class="wp-form-field-input wp-form-other-input" data-other-for="${fieldName}" data-other-value="${escapePhpString(opt.value)}" placeholder="<?php echo esc_attr('${escapePhpString(placeholder || 'Please specify...')}'); ?>" style="display:none; margin-top:8px;">` : ''}`).join('') || ''}
                 </div>`;
       break;
     
@@ -1628,6 +1671,7 @@ export function generateFormJS(form: Form): string {
             this.container = this.form.closest('.wp-form');
             this.steps = this.form.find('.wp-form-step');
             this.currentStep = 0;
+            this.stepHistory = []; // Real path of visited step indices for the back button
             this.formData = {};
             this.totalSteps = this.steps.length;
             this.shadowRoot = null; // Set externally after construction
@@ -1708,6 +1752,23 @@ export function generateFormJS(form: Form): string {
                     // Checkbox: toggle selected class
                     $option.toggleClass('selected', $input.is(':checked'));
                 }
+            });
+            
+            // "Other" custom text input: reveal when its radio option is chosen
+            this.form.on('change', 'input[type="radio"]', function() {
+                const $input = $(this);
+                const name = $input.attr('name');
+                if (!name) return;
+                self.form.find('.wp-form-other-input[data-other-for="' + name + '"]').each(function() {
+                    const $txt = $(this);
+                    const isOther = $input.is(':checked') && $input.data('other-option') &&
+                        String($input.val()) === String($txt.data('other-value'));
+                    if (isOther) {
+                        $txt.show().trigger('focus');
+                    } else {
+                        $txt.hide().val('');
+                    }
+                });
             });
             
             // Initialize selected state for pre-checked inputs
@@ -1959,6 +2020,16 @@ export function generateFormJS(form: Form): string {
                     }
                 } else {
                     self.formData[name] = $el.val();
+                }
+            });
+            
+            // Substitute the typed "Other" text as the value when that radio option is selected
+            this.form.find('.wp-form-other-input').each(function() {
+                const $txt = $(this);
+                const name = $txt.data('other-for');
+                const otherVal = String($txt.data('other-value'));
+                if (name && self.formData[name] !== undefined && String(self.formData[name]) === otherVal) {
+                    self.formData[name] = $txt.val();
                 }
             });
             
@@ -2304,14 +2375,14 @@ export function generateFormJS(form: Form): string {
                 case 'equals':
                     // For arrays (checkboxes), check if the array contains the value
                     if (isArray) {
-                        return value.includes(compareValue);
+                        return value.some(v => String(v).toLowerCase() === String(compareValue).toLowerCase());
                     }
-                    return String(value) === String(compareValue);
+                    return String(value).toLowerCase() === String(compareValue).toLowerCase();
                 case 'not_equals':
                     if (isArray) {
-                        return !value.includes(compareValue);
+                        return !value.some(v => String(v).toLowerCase() === String(compareValue).toLowerCase());
                     }
-                    return String(value) !== String(compareValue);
+                    return String(value).toLowerCase() !== String(compareValue).toLowerCase();
                 case 'contains':
                     if (isArray) {
                         return value.some(v => String(v).toLowerCase().includes(String(compareValue).toLowerCase()));
@@ -2360,14 +2431,14 @@ export function generateFormJS(form: Form): string {
                 }
                 case 'starts_with':
                     if (isArray) {
-                        return value.some(v => String(v).startsWith(compareValue));
+                        return value.some(v => String(v).toLowerCase().startsWith(String(compareValue).toLowerCase()));
                     }
-                    return String(value).startsWith(compareValue);
+                    return String(value).toLowerCase().startsWith(String(compareValue).toLowerCase());
                 case 'ends_with':
                     if (isArray) {
-                        return value.some(v => String(v).endsWith(compareValue));
+                        return value.some(v => String(v).toLowerCase().endsWith(String(compareValue).toLowerCase()));
                     }
-                    return String(value).endsWith(compareValue);
+                    return String(value).toLowerCase().endsWith(String(compareValue).toLowerCase());
                 default: return true;
             }
         }
@@ -2407,6 +2478,13 @@ export function generateFormJS(form: Form): string {
                     }
                     if (nav.target.type === 'next') return this.currentStep + 1;
                 }
+            }
+            
+            // Default navigation (honor configured default next step)
+            if (stepConfig.defaultNextStep) {
+                if (stepConfig.defaultNextStep === '__submit__') return -1;
+                const defaultIndex = stepsConfig.findIndex(s => s.id === stepConfig.defaultNextStep);
+                if (defaultIndex !== -1) return defaultIndex;
             }
             
             return this.currentStep + 1;
@@ -2504,14 +2582,37 @@ export function generateFormJS(form: Form): string {
         }
         
         prevStep() {
+            const step = this.steps.eq(this.currentStep);
+            const stepId = step.data('step-id');
+            const stepConfig = stepsConfig.find(s => s.id === stepId);
+            // An explicitly configured previous step always takes priority
+            if (stepConfig && stepConfig.defaultPrevStep) {
+                const targetIndex = stepsConfig.findIndex(s => s.id === stepConfig.defaultPrevStep);
+                if (targetIndex !== -1) {
+                    this.goToStep(targetIndex, { isBack: true });
+                    return;
+                }
+            }
+            // Otherwise retrace the actual navigation path (handles conditional skips)
+            if (this.stepHistory.length > 0) {
+                const prevIndex = this.stepHistory.pop();
+                this.goToStep(prevIndex, { isBack: true });
+                return;
+            }
             if (this.currentStep > 0) {
-                this.goToStep(this.currentStep - 1);
+                this.goToStep(this.currentStep - 1, { isBack: true });
             }
         }
         
-        goToStep(index) {
+        goToStep(index, options) {
             const self = this;
             log('Going to step', index);
+            
+            // Record the step we're leaving on forward moves so the back button
+            // can retrace the real path. Back moves consume the history instead.
+            if (!options || !options.isBack) {
+                self.stepHistory.push(self.currentStep);
+            }
             
             // Prevent navigation if already navigating
             if (self.isNavigating && self.currentStep !== index) {

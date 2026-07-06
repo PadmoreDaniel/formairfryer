@@ -748,6 +748,14 @@ function QuestionPreview({ question }: { question: Question }) {
       return <input type="date" disabled className="preview-input" />;
     case 'time':
       return <input type="time" disabled className="preview-input" />;
+    case 'year':
+      return (question.yearInputStyle || 'dropdown') === 'text' ? (
+        <input type="text" placeholder={question.placeholder || 'e.g. 2021'} disabled className="preview-input" />
+      ) : (
+        <select disabled className="preview-select">
+          <option>{question.placeholder || 'Select year...'}</option>
+        </select>
+      );
     case 'rating':
       return (
         <div className="preview-rating">

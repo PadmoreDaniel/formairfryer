@@ -15,6 +15,7 @@ export type QuestionType =
   | 'date'
   | 'time'
   | 'datetime'
+  | 'year'
   | 'file'
   | 'rating'
   | 'slider'
@@ -29,6 +30,7 @@ export interface QuestionOption {
   label: string;
   value: string;
   imageUrl?: string;
+  allowCustomInput?: boolean; // For radio: selecting this option reveals a free-text input whose value is submitted
 }
 
 export interface QuestionValidation {
@@ -60,6 +62,10 @@ export interface Question {
   privacyPolicyText?: string; // Text displayed next to the checkbox (for privacy_policy type)
   booleanValue?: boolean; // For privacy_policy type: submit as true/false instead of ["accepted"]
   useDateInputMask?: boolean; // For date fields: use text input with mask instead of date picker (better for mobile)
+  yearInputStyle?: 'dropdown' | 'text'; // For year fields: render a dropdown or a free-text input
+  minYear?: number; // For year fields (dropdown): earliest selectable year
+  maxYear?: number; // For year fields (dropdown): latest selectable year
+  maxYearCurrent?: boolean; // For year fields (dropdown): use the current year as the maximum (resolved dynamically)
   textAlignment?: 'left' | 'center' | 'right'; // For helper_text type: text alignment
   helperContent?: string; // For helper_text type: the display text content
   // Grid positioning

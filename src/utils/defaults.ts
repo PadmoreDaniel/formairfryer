@@ -186,6 +186,13 @@ export const createQuestion = (type: QuestionType, gridRow: number = 1): Questio
     baseQuestion.validation = { required: false };
   }
 
+  // Set defaults for year
+  if (type === 'year') {
+    baseQuestion.yearInputStyle = 'dropdown';
+    baseQuestion.minYear = 1900;
+    baseQuestion.maxYear = new Date().getFullYear();
+  }
+
   return baseQuestion;
 };
 
@@ -242,6 +249,7 @@ function getDefaultLabel(type: QuestionType): string {
     date: 'Date',
     time: 'Time',
     datetime: 'Date & Time',
+    year: 'Year',
     file: 'File Upload',
     rating: 'Rating',
     slider: 'Slider',
@@ -269,6 +277,7 @@ function getDefaultPlaceholder(type: QuestionType): string {
     date: 'Select a date...',
     time: 'Select a time...',
     datetime: 'Select date and time...',
+    year: 'e.g. 2021',
     file: 'Choose a file...',
     rating: '',
     slider: '',
@@ -319,6 +328,7 @@ export const questionTypeInfo: Record<QuestionType, { label: string; icon: strin
   date: { label: 'Date', icon: 'D', category: 'DateTime' },
   time: { label: 'Time', icon: 'T', category: 'DateTime' },
   datetime: { label: 'Date & Time', icon: 'DT', category: 'DateTime' },
+  year: { label: 'Year', icon: 'YYYY', category: 'DateTime' },
   file: { label: 'File Upload', icon: '⬆', category: 'Advanced' },
   rating: { label: 'Rating', icon: '★', category: 'Advanced' },
   slider: { label: 'Slider', icon: '—○—', category: 'Advanced' },
