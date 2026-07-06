@@ -379,6 +379,14 @@ class ${toPascalCase(pluginSettings.pluginSlug)}_Form_Handler {
             }
         }
         
+        // Preserve page-history tracking values (wp-react-page-history-tracking)
+        if (isset($data['referrer'])) {
+            $submit_data['referrer'] = sanitize_text_field($data['referrer']);
+        }
+        if (isset($data['lastInternalPage'])) {
+            $submit_data['lastInternalPage'] = sanitize_text_field($data['lastInternalPage']);
+        }
+        
         // Send to external URL if configured
         if (!empty($submission_config['url'])) {
             $response = wp_remote_post($submission_config['url'], array(

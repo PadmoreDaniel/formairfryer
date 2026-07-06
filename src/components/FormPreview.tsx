@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useBuilder } from '../context/BuilderContext';
 import { Question, Condition, ConditionRule } from '../types';
+import { getTrackingData } from '../utils/trackingData';
 
 export function FormPreview() {
   const { state, dispatch } = useBuilder();
@@ -436,6 +437,16 @@ export function FormPreview() {
         }
       });
     });
+
+    // Attach page-history tracking values (wp-react-page-history-tracking).
+    // Only set when not already provided by a form field of the same name.
+    const trackingData = getTrackingData();
+    if (submissionData.referrer === undefined) {
+      submissionData.referrer = trackingData.referrer;
+    }
+    if (submissionData.lastInternalPage === undefined) {
+      submissionData.lastInternalPage = trackingData.lastInternalPage;
+    }
     
     console.log('[Preview] Form submission data:', submissionData);
     

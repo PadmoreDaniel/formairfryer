@@ -2622,6 +2622,31 @@ export function generateFormJS(form: Form): string {
                 }
             });
             
+            // Attach page-history tracking values persisted by the
+            // wp-react-page-history-tracking plugin (same-origin storage).
+            try {
+                if (mergedFormData.referrer === undefined) {
+                    mergedFormData.referrer = localStorage.getItem('referrer') || '';
+                }
+                if (mergedFormData.lastInternalPage === undefined) {
+                    const pageVisits = JSON.parse(sessionStorage.getItem('pageVisits') || '[]');
+                    let lastInternalPage = '';
+                    if (Array.isArray(pageVisits) && pageVisits.length > 0) {
+                        const assumedCurrent = (pageVisits[pageVisits.length - 1] || {}).page || '';
+                        for (let i = pageVisits.length - 1; i >= 0; i--) {
+                            const p = (pageVisits[i] || {}).page || '';
+                            if (p && p !== assumedCurrent) {
+                                lastInternalPage = p;
+                                break;
+                            }
+                        }
+                    }
+                    mergedFormData.lastInternalPage = lastInternalPage;
+                }
+            } catch (e) {
+                log('Unable to read page-history tracking values', e);
+            }
+            
             // Use custom URL if configured, otherwise use WordPress AJAX
             const useCustomUrl = submissionConfig.url && submissionConfig.url.trim() !== '';
             const submitUrl = useCustomUrl ? submissionConfig.url : config.ajaxUrl;
