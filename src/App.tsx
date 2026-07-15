@@ -15,6 +15,9 @@ function AppContent() {
   const { loadForm, dispatch } = useBuilder();
   const [currentView, setCurrentView] = useState<AppView>(user ? 'builder' : 'login');
   const [loadedFormId, setLoadedFormId] = useState<string | null>(null);
+  // How the builder was entered. Only the initial 'draft' entry should restore
+  // the auto-saved localStorage draft; explicit new/loaded entries must not.
+  const [builderEntry, setBuilderEntry] = useState<'draft' | 'new' | 'loaded'>('draft');
 
   // Update view when auth state changes
   React.useEffect(() => {
@@ -27,6 +30,7 @@ function AppContent() {
     dispatch({ type: 'SET_PROJECT', payload: project });
     loadForm(form);
     setLoadedFormId(firestoreId || null);
+    setBuilderEntry('loaded');
     setCurrentView('builder');
   };
 
@@ -38,6 +42,7 @@ function AppContent() {
       dispatch({ type: 'RESET_FORM' });
     }
     setLoadedFormId(null);
+    setBuilderEntry('new');
     setCurrentView('builder');
   };
 
@@ -79,6 +84,7 @@ function AppContent() {
     <FormBuilder 
       onShowFormsList={handleGoToFormsList}
       loadedFormId={loadedFormId}
+      restoreDraft={builderEntry === 'draft'}
     />
   );
 }

@@ -1,6 +1,6 @@
 import { Form, FormExport, Project, ProjectExport } from '../types';
 import { generateThemeCSS, generateFormHTML, generateFormJS, getGoogleFontsUrl, getFormConfigVar } from './wpPluginGenerator';
-import { resolveEffectiveForm, generateChildId } from './defaults';
+import { resolveEffectiveForm, generateChildId, projectPluginToFormPlugin } from './defaults';
 
 // Export form as JSON
 export function exportFormAsJSON(form: Form): string {
@@ -137,7 +137,17 @@ function resolveChildren(project: Project, forms: Form[]): ResolvedChild[] {
     }
     used.add(candidate);
 
-    const effective = resolveEffectiveForm(form, project);
+    const resolved = resolveEffectiveForm(form, project);
+    // A project exports as a single plugin, so every child must share the
+    // project's plugin identity (slug/shortcode). This keeps the localized
+    // config variable, AJAX action and nonce consistent between the generated
+    // PHP and JS — otherwise a child that doesn't inherit the plugin section
+    // would look up a mismatched config var and load no styles/config.
+    // Build a new object so the original form is never mutated.
+    const effective: Form = {
+      ...resolved,
+      pluginSettings: projectPluginToFormPlugin(project.defaults.plugin),
+    };
     return {
       childId: candidate,
       form: effective,

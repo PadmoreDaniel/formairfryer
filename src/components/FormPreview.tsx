@@ -25,6 +25,21 @@ export function FormPreview() {
   // never merely because we landed on a step whose condition already matches
   // (which previously trapped users when navigating back).
   const autoNavArmed = useRef(false);
+  // Monotonic navigation token. Every step change increments it. A pending
+  // auto-advance/conditional-navigation timer captures the token when it is
+  // scheduled and aborts if the token has since changed (e.g. the user pressed
+  // Back before the timer fired), which previously caused Back to jump forward.
+  const navToken = useRef(0);
+  const autoAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cancel any pending auto-advance/conditional-navigation timer.
+  const cancelPendingAutoNav = () => {
+    if (autoAdvanceTimer.current) {
+      clearTimeout(autoAdvanceTimer.current);
+      autoAdvanceTimer.current = null;
+    }
+    navToken.current += 1;
+  };
 
   const currentStep = form.steps[currentStepIndex] || form.steps[0];
   const isFirstStep = currentStepIndex === 0;
@@ -65,6 +80,9 @@ export function FormPreview() {
   // Step transition function
   const transitionToStep = (newIndex: number, options?: { isBack?: boolean }) => {
     if (isTransitioning) return;
+    // Any transition invalidates a pending auto-advance timer so a stale timer
+    // cannot fire after the user has already navigated (e.g. pressed Back).
+    cancelPendingAutoNav();
     // Record the step we're leaving on forward moves so the back button can
     // retrace the actual path. Back moves consume the history instead.
     if (!options?.isBack) {
@@ -94,8 +112,14 @@ export function FormPreview() {
       if (evaluateCondition(nav.condition)) {
         autoNavArmed.current = false;
         isNavigating.current = true;
+        // Capture the current navigation token; abort if it changes (e.g. the
+        // user pressed Back) before this delayed navigation runs.
+        const myToken = navToken.current;
+        if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
         // Small delay to allow UI to update before navigation
-        setTimeout(async () => {
+        autoAdvanceTimer.current = setTimeout(async () => {
+          autoAdvanceTimer.current = null;
+          if (myToken !== navToken.current) return;
           if (nav.target.type === 'submit') {
             await handleSubmit();
           } else if (nav.target.type === 'specific' && nav.target.stepId) {
@@ -446,22 +470,24 @@ export function FormPreview() {
 
   const handleBack = () => {
     if (isTransitioning) return;
+    // Immediately cancel any pending auto-advance so a stale timer cannot fire
+    // and push the user forward after they chose to go back.
+    cancelPendingAutoNav();
     isNavigating.current = true;
-    // An explicitly configured previous step always takes priority.
+    // Always consume one history entry so Back stays balanced with the forward
+    // pushes, even when an explicit defaultPrevStep is used. Otherwise the
+    // history desyncs and a later history-based Back can pop a forward index.
+    const historyTop = stepHistory.current.length > 0 ? stepHistory.current.pop()! : undefined;
+    let targetIndex = -1;
+    // An explicitly configured previous step takes priority for the target.
     if (currentStep.defaultPrevStep) {
-      const targetIndex = form.steps.findIndex((s) => s.id === currentStep.defaultPrevStep);
-      if (targetIndex !== -1) {
-        transitionToStep(targetIndex, { isBack: true });
-        return;
-      }
+      const idx = form.steps.findIndex((s) => s.id === currentStep.defaultPrevStep);
+      if (idx !== -1) targetIndex = idx;
     }
     // Otherwise retrace the actual navigation path.
-    if (stepHistory.current.length > 0) {
-      const prevIndex = stepHistory.current.pop()!;
-      transitionToStep(prevIndex, { isBack: true });
-      return;
-    }
-    transitionToStep(Math.max(0, currentStepIndex - 1), { isBack: true });
+    if (targetIndex === -1 && historyTop !== undefined) targetIndex = historyTop;
+    if (targetIndex === -1) targetIndex = Math.max(0, currentStepIndex - 1);
+    transitionToStep(targetIndex, { isBack: true });
   };
 
   const handleSubmit = async () => {
@@ -639,8 +665,17 @@ export function FormPreview() {
       
       if (hasValidValue && !shouldExcludeByValue && !isCustomInputRadio && !isNavigating.current && !isTransitioning) {
         isNavigating.current = true;
+        // Capture the navigation token; abort if the user navigates (e.g.
+        // presses Back) before this delayed auto-advance fires.
+        const myToken = navToken.current;
+        if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
         // Small delay to show the selection before advancing
-        setTimeout(() => {
+        autoAdvanceTimer.current = setTimeout(() => {
+          autoAdvanceTimer.current = null;
+          if (myToken !== navToken.current) {
+            isNavigating.current = false;
+            return;
+          }
           const nextIndex = getNextStepIndex();
           if (nextIndex === -1 || nextIndex >= form.steps.length) {
             handleSubmit();

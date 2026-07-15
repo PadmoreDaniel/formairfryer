@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useBuilder } from '../context/BuilderContext';
+import { useAuth } from '../context/AuthContext';
+import { getUserProjects, SavedProject } from '../services/formService';
+import { createDefaultInheritance, generateChildId } from '../utils/defaults';
 import { PostSubmissionRulesEditor } from './PostSubmissionRulesEditor';
 import { InheritableSection } from '../types';
 
@@ -13,13 +16,49 @@ const inheritanceSections: { key: InheritableSection; label: string; hint: strin
 
 export function FormSettings() {
   const { state, dispatch } = useBuilder();
+  const { user } = useAuth();
   const { form } = state;
   const currentProject = state.currentProject;
   const [activeTab, setActiveTab] = useState<'general' | 'submission' | 'plugin'>('general');
+  const [projects, setProjects] = useState<SavedProject[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    if (!user) {
+      setProjects([]);
+      return;
+    }
+    getUserProjects(user.uid)
+      .then((list) => { if (active) setProjects(list); })
+      .catch(() => { if (active) setProjects([]); });
+    return () => { active = false; };
+  }, [user]);
 
   const updateForm = (updates: Partial<typeof form>) => {
     dispatch({ type: 'UPDATE_FORM', payload: updates });
   };
+
+  // Assign the current form to a project (or detach it). Existing forms keep
+  // their own look by default (no inherited sections) so linking never causes
+  // a surprise visual change; the user can opt in per section afterwards.
+  const handleAssignProject = useCallback((projectId: string) => {
+    if (!projectId) {
+      dispatch({ type: 'SET_PROJECT', payload: null });
+      dispatch({ type: 'UPDATE_FORM', payload: { projectId: undefined } });
+      return;
+    }
+    const saved = projects.find((p) => p.id === projectId);
+    if (!saved) return;
+    dispatch({ type: 'SET_PROJECT', payload: saved.project });
+    dispatch({
+      type: 'UPDATE_FORM',
+      payload: {
+        projectId: saved.project.id,
+        childId: form.childId || generateChildId(form.name),
+        inheritance: form.inheritance || createDefaultInheritance(false),
+      },
+    });
+  }, [projects, dispatch, form.childId, form.name, form.inheritance]);
 
   const updateSubmissionConfig = (updates: Partial<typeof form.submissionConfig>) => {
     dispatch({ type: 'UPDATE_SUBMISSION_CONFIG', payload: updates });
@@ -99,17 +138,27 @@ export function FormSettings() {
               />
             </div>
 
+            <div className="form-group">
+              <label>Project</label>
+              <select
+                value={form.projectId || ''}
+                onChange={(e) => handleAssignProject(e.target.value)}
+              >
+                <option value="">No project (standalone)</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.project.name}
+                  </option>
+                ))}
+              </select>
+              <p className="field-hint">
+                Link this form to a project to share its design system and export
+                every project form as a single plugin.
+              </p>
+            </div>
+
             {currentProject && (
               <div className="project-inheritance">
-                <div className="form-group">
-                  <label>Project</label>
-                  <input type="text" value={currentProject.name} disabled />
-                  <p className="field-hint">
-                    This form belongs to a project. Inherited sections stay in sync
-                    with the project's design system.
-                  </p>
-                </div>
-
                 <div className="form-group">
                   <label>Form ID (shortcode)</label>
                   <input

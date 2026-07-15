@@ -1687,6 +1687,8 @@ export function generateFormJS(form: Form, childId?: string): string {
             this.isNavigating = false; // Prevent double navigation
             this.isSubmitting = false; // Prevent navigation during submission
             this.autoNavTimeout = null; // Debounce timeout for auto-navigation
+            this.autoAdvanceTimer = null; // Pending delayed auto-advance/conditional navigation
+            this.navToken = 0; // Incremented on every navigation to invalidate stale timers
             
             log('FormHandler initialized', { totalSteps: this.totalSteps, config: formConfig });
             this.init();
@@ -2533,9 +2535,15 @@ export function generateFormJS(form: Form, childId?: string): string {
                 if (this.evaluateCondition(nav.condition)) {
                     log('Auto-navigation triggered by condition:', nav);
                     self.isNavigating = true;
-                    
+
+                    // Capture the navigation token; abort if it changes (e.g.
+                    // the user pressed Back) before this delayed nav runs.
+                    var navTok = self.navToken;
+                    clearTimeout(self.autoAdvanceTimer);
                     // Small delay to allow UI to update before navigation
-                    setTimeout(function() {
+                    self.autoAdvanceTimer = setTimeout(function() {
+                        self.autoAdvanceTimer = null;
+                        if (navTok !== self.navToken) { self.isNavigating = false; return; }
                         if (nav.target.type === 'submit') {
                             self.submitForm();
                         } else if (nav.target.type === 'specific' && nav.target.stepId) {
@@ -2578,9 +2586,15 @@ export function generateFormJS(form: Form, childId?: string): string {
               if (hasValidValue && !shouldExcludeByValue && !isCustomInputRadio) {
                     log('Auto-advance triggered for single question step:', stepConfig.title);
                     self.isNavigating = true;
-                    
+
+                    // Capture the navigation token; abort if it changes (e.g.
+                    // the user pressed Back) before this delayed advance runs.
+                    var navTok = self.navToken;
+                    clearTimeout(self.autoAdvanceTimer);
                     // Small delay to show the selection before advancing
-                    setTimeout(function() {
+                    self.autoAdvanceTimer = setTimeout(function() {
+                        self.autoAdvanceTimer = null;
+                        if (navTok !== self.navToken) { self.isNavigating = false; return; }
                         const nextIndex = self.getNextStepIndex();
                         if (nextIndex === -1 || nextIndex >= self.totalSteps) {
                             self.submitForm();
@@ -2622,32 +2636,40 @@ export function generateFormJS(form: Form, childId?: string): string {
         }
         
         prevStep() {
+            // Immediately invalidate any pending auto-advance so a stale timer
+            // cannot fire and push the user forward after they chose to go back.
+            this.navToken++;
+            clearTimeout(this.autoAdvanceTimer);
+            this.autoAdvanceTimer = null;
             const step = this.steps.eq(this.currentStep);
             const stepId = step.data('step-id');
             const stepConfig = stepsConfig.find(s => s.id === stepId);
-            // An explicitly configured previous step always takes priority
+            // Always consume one history entry so Back stays balanced with the
+            // forward pushes, even when an explicit defaultPrevStep is used.
+            // Otherwise history desyncs and a later Back can pop a forward index.
+            var historyTop = this.stepHistory.length > 0 ? this.stepHistory.pop() : undefined;
+            var targetIndex = -1;
+            // An explicitly configured previous step takes priority for the target.
             if (stepConfig && stepConfig.defaultPrevStep) {
-                const targetIndex = stepsConfig.findIndex(s => s.id === stepConfig.defaultPrevStep);
-                if (targetIndex !== -1) {
-                    this.goToStep(targetIndex, { isBack: true });
-                    return;
-                }
+                const idx = stepsConfig.findIndex(s => s.id === stepConfig.defaultPrevStep);
+                if (idx !== -1) targetIndex = idx;
             }
-            // Otherwise retrace the actual navigation path (handles conditional skips)
-            if (this.stepHistory.length > 0) {
-                const prevIndex = this.stepHistory.pop();
-                this.goToStep(prevIndex, { isBack: true });
-                return;
-            }
-            if (this.currentStep > 0) {
-                this.goToStep(this.currentStep - 1, { isBack: true });
-            }
+            // Otherwise retrace the actual navigation path (handles conditional skips).
+            if (targetIndex === -1 && historyTop !== undefined) targetIndex = historyTop;
+            if (targetIndex === -1) targetIndex = Math.max(0, this.currentStep - 1);
+            this.goToStep(targetIndex, { isBack: true });
         }
         
         goToStep(index, options) {
             const self = this;
             log('Going to step', index);
-            
+
+            // Invalidate any pending auto-advance timer so it cannot fire after
+            // this navigation completes.
+            self.navToken++;
+            clearTimeout(self.autoAdvanceTimer);
+            self.autoAdvanceTimer = null;
+
             // Record the step we're leaving on forward moves so the back button
             // can retrace the real path. Back moves consume the history instead.
             if (!options || !options.isBack) {

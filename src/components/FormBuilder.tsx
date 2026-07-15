@@ -21,6 +21,9 @@ type RightPanelTab = 'question' | 'theme' | 'progress' | 'navigation' | 'flow' |
 interface FormBuilderProps {
   onShowFormsList?: () => void;
   loadedFormId?: string | null;
+  // Only restore the auto-saved localStorage draft when true (initial entry).
+  // Explicit new/loaded entries pass false so they aren't overwritten.
+  restoreDraft?: boolean;
 }
 
 // Resizable sidebar bounds (px).
@@ -124,7 +127,7 @@ function ResizeHandle({ ariaLabel, min, max, value, onResize, grow }: ResizeHand
   );
 }
 
-export function FormBuilder({ onShowFormsList, loadedFormId }: FormBuilderProps) {
+export function FormBuilder({ onShowFormsList, loadedFormId, restoreDraft = true }: FormBuilderProps) {
   const { state, dispatch, getSelectedStep } = useBuilder();
   const { user } = useAuth();
   const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>('question');
@@ -239,8 +242,10 @@ export function FormBuilder({ onShowFormsList, loadedFormId }: FormBuilderProps)
     dispatch({ type: 'TOGGLE_PREVIEW', payload: true });
   }, [dispatch]);
 
-  // Load from localStorage on mount (only if no form was loaded from the list)
+  // Load from localStorage on mount (only on the initial draft entry — never
+  // when a form was explicitly created new or loaded from the list).
   useEffect(() => {
+    if (!restoreDraft) return; // Skip - explicit new/loaded form
     if (loadedFormId) return; // Skip - a form was explicitly loaded
     const savedForm = localStorage.getItem('wp-form-builder-form');
     if (savedForm) {
