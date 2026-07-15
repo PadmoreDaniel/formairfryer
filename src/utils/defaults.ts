@@ -108,6 +108,7 @@ export const defaultProgressConfig: ProgressConfig = {
 export const defaultSubmissionConfig: SubmissionConfig = {
   method: 'POST',
   url: '',
+  appendWPCidParamsToSubmissionUrl: true,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -208,6 +209,7 @@ export const createStep = (index: number): Step => ({
   continueButton: { ...defaultContinueButton },
   conditionalNavigation: [],
   validateOnContinue: true,
+  autoAdvanceExcludeValues: [],
 });
 
 // Create a new form

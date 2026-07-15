@@ -2148,6 +2148,25 @@ export function generateFormJS(form: Form): string {
                     log('Validation FAILED: required field empty', questionId, 'isValid now:', isValid);
                     return;
                 }
+
+                // For radio options with custom text input ("Other"), a checked radio is not enough.
+                // If the checked option expects custom input, require non-empty typed text.
+                if (isRequired && $input.is(':radio')) {
+                  const $checkedRadio = $field.find('input[type="radio"]:checked').first();
+                  if ($checkedRadio.length && $checkedRadio.data('other-option')) {
+                    const radioName = $checkedRadio.attr('name');
+                    const otherValue = String($checkedRadio.val());
+                    const $otherInput = $field.find('.wp-form-other-input[data-other-for="' + radioName + '"][data-other-value="' + otherValue + '"]');
+                    const otherText = $otherInput.length ? String($otherInput.val() || '').trim() : '';
+                    if (!otherText) {
+                      $field.addClass('has-error');
+                      $field.find('.wp-form-field-error').text('This field is required').show();
+                      isValid = false;
+                      log('Validation FAILED: custom radio input required', questionId);
+                      return;
+                    }
+                  }
+                }
                 
                 // Skip other validations if empty and not required
                 if (!value || value === '') return;
@@ -2530,12 +2549,20 @@ export function generateFormJS(form: Form): string {
                 const question = stepConfig.questions[0];
                 const fieldName = question.fieldName || question.id;
                 const value = this.formData[fieldName];
+              const excludedValues = Array.isArray(stepConfig.autoAdvanceExcludeValues)
+                ? stepConfig.autoAdvanceExcludeValues
+                : [];
+              const shouldExcludeByValue = typeof value === 'string' && excludedValues.includes(value);
+              const selectedOption = Array.isArray(question.options)
+                ? question.options.find(opt => String(opt.value) === String(value))
+                : null;
+              const isCustomInputRadio = question.type === 'radio' && selectedOption && selectedOption.allowCustomInput;
                 
                 // Check if the question has a valid value
                 const hasValidValue = value !== '' && value !== null && value !== undefined && 
                     !(Array.isArray(value) && value.length === 0);
                 
-                if (hasValidValue) {
+              if (hasValidValue && !shouldExcludeByValue && !isCustomInputRadio) {
                     log('Auto-advance triggered for single question step:', stepConfig.title);
                     self.isNavigating = true;
                     
@@ -2750,7 +2777,16 @@ export function generateFormJS(form: Form): string {
             
             // Use custom URL if configured, otherwise use WordPress AJAX
             const useCustomUrl = submissionConfig.url && submissionConfig.url.trim() !== '';
-            const submitUrl = useCustomUrl ? submissionConfig.url : config.ajaxUrl;
+            let submitUrl = useCustomUrl ? submissionConfig.url : config.ajaxUrl;
+            if (useCustomUrl && submissionConfig.appendWPCidParamsToSubmissionUrl !== false) {
+              try {
+                if (window.WPCidTracking && typeof window.WPCidTracking.appendTo === 'function') {
+                  submitUrl = window.WPCidTracking.appendTo(submitUrl);
+                }
+              } catch (e) {
+                log('Unable to append WP CID params to submission URL', e);
+              }
+            }
             const submitData = useCustomUrl 
                 ? mergedFormData 
                 : {
@@ -2758,6 +2794,9 @@ export function generateFormJS(form: Form): string {
                     nonce: config.nonce,
                     formData: JSON.stringify(mergedFormData)
                 };
+            const requestHeaders = useCustomUrl && submissionConfig.headers && typeof submissionConfig.headers === 'object'
+              ? submissionConfig.headers
+              : undefined;
             
             log('Submitting to', submitUrl, 'with data', submitData);
             
@@ -2766,6 +2805,7 @@ export function generateFormJS(form: Form): string {
                 type: submissionConfig.method || 'POST',
                 data: useCustomUrl ? JSON.stringify(submitData) : submitData,
                 contentType: useCustomUrl ? 'application/json' : 'application/x-www-form-urlencoded; charset=UTF-8',
+              headers: requestHeaders,
                 success: (response) => {
                     this.hideLoading();
                     log('Submit response', response);

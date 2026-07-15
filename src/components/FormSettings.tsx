@@ -114,6 +114,23 @@ export function FormSettings() {
               />
             </div>
 
+            <div className="form-group checkbox-group">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={form.submissionConfig.appendWPCidParamsToSubmissionUrl ?? true}
+                  onChange={(e) =>
+                    updateSubmissionConfig({ appendWPCidParamsToSubmissionUrl: e.target.checked })
+                  }
+                />
+                <span>Append WP CID Tracking parameters to custom submission URL</span>
+              </label>
+              <p className="hint">
+                Exported WordPress forms only. When enabled, query params from window.WPCidTracking are appended to the
+                configured submission URL if missing.
+              </p>
+            </div>
+
             <div className="form-group">
               <label>Headers (JSON)</label>
               <textarea

@@ -620,11 +620,16 @@ export function FormPreview() {
     
     // Auto-advance for single question steps when enabled
     if (currentStep.autoAdvance && currentStep.questions.length === 1) {
+      const excludedValues = currentStep.autoAdvanceExcludeValues || [];
+      const shouldExcludeByValue = typeof value === 'string' && excludedValues.includes(value);
+      const selectedOption = (question.options || []).find((option) => option.value === value);
+      const isCustomInputRadio = question.type === 'radio' && !!selectedOption?.allowCustomInput;
+
       // Check if the question has a valid value
       const hasValidValue = value !== '' && value !== null && value !== undefined && 
         !(Array.isArray(value) && value.length === 0);
       
-      if (hasValidValue && !isNavigating.current && !isTransitioning) {
+      if (hasValidValue && !shouldExcludeByValue && !isCustomInputRadio && !isNavigating.current && !isTransitioning) {
         isNavigating.current = true;
         // Small delay to show the selection before advancing
         setTimeout(() => {

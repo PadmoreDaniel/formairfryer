@@ -88,6 +88,12 @@ export function StepEditor() {
     });
   };
 
+  const singleQuestion = step.questions.length === 1 ? step.questions[0] : null;
+  const supportsAutoAdvanceExclusions =
+    !!singleQuestion && (singleQuestion.type === 'radio' || singleQuestion.type === 'select');
+  const exclusionOptions = singleQuestion?.options || [];
+  const exclusionValues = step.autoAdvanceExcludeValues || [];
+
   return (
     <div className="step-editor">
       <div className="step-header">
@@ -479,6 +485,39 @@ export function StepEditor() {
               <span className="help-text" style={{ display: 'block', fontSize: '0.8em', color: '#666', marginTop: '4px' }}>
                 When enabled and this step has only one question, the form will automatically advance to the next step when answered.
               </span>
+            )}
+            {step.autoAdvance && supportsAutoAdvanceExclusions && exclusionOptions.length > 0 && (
+              <div style={{ marginTop: '8px' }}>
+                <span className="help-text" style={{ display: 'block', fontSize: '0.8em', color: '#666', marginBottom: '6px' }}>
+                  Exclude options from auto-advance
+                </span>
+                <div style={{ display: 'grid', gap: '4px' }}>
+                  {exclusionOptions.map((option) => (
+                    <label key={option.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82em' }}>
+                      <input
+                        type="checkbox"
+                        checked={exclusionValues.includes(option.value)}
+                        onChange={(e) => {
+                          const nextValues = e.target.checked
+                            ? [...exclusionValues, option.value]
+                            : exclusionValues.filter((v) => v !== option.value);
+                          dispatch({
+                            type: 'UPDATE_STEP',
+                            payload: {
+                              stepId: step.id,
+                              updates: { autoAdvanceExcludeValues: nextValues },
+                            },
+                          });
+                        }}
+                      />
+                      <span>{option.label || option.value}</span>
+                    </label>
+                  ))}
+                </div>
+                <span className="help-text" style={{ display: 'block', fontSize: '0.75em', color: '#666', marginTop: '6px' }}>
+                  Selected options stay on this step. Other options continue to auto-advance.
+                </span>
+              </div>
             )}
           </div>
           

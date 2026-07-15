@@ -171,6 +171,7 @@ export interface Step {
   scrollOnError?: boolean; // Scroll to first error on validation failure (default: true)
   // Auto-advance for single question steps
   autoAdvance?: boolean; // Automatically navigate to next step when question is answered
+  autoAdvanceExcludeValues?: string[]; // Option values that should not auto-advance on single-question radio/select steps
   enterKeyAdvance?: boolean; // Allow Enter key to advance to next step in single question steps
 }
 
@@ -286,6 +287,7 @@ export interface CustomField {
 export interface SubmissionConfig {
   method: 'POST' | 'GET';
   url: string;
+  appendWPCidParamsToSubmissionUrl?: boolean; // Exported WP runtime: append stored CID/UTM params to custom submission URL
   headers: Record<string, string>;
   includeFields: 'all' | string[]; // 'all' or specific question IDs
   transformData?: string; // JavaScript function to transform data before sending
