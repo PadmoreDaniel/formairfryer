@@ -1524,11 +1524,19 @@ function toCamelCase(str: string): string {
     .join('');
 }
 
+// Compute the localized JS config global name for a form. When a childId is
+// provided (project export) the name is namespaced so multiple child forms on
+// the same page do not overwrite each other's config.
+export function getFormConfigVar(pluginSlug: string, childId?: string): string {
+  const ns = childId ? `${pluginSlug}-${childId.replace(/_/g, '-')}` : pluginSlug;
+  return toCamelCase(ns) + 'Config';
+}
+
 // Generate Form JavaScript with Shadow DOM encapsulation
-export function generateFormJS(form: Form): string {
+export function generateFormJS(form: Form, childId?: string): string {
   const { pluginSettings, progressConfig } = form;
   // IMPORTANT: This must match the variable name used in PHP wp_localize_script
-  const configVar = toCamelCase(pluginSettings.pluginSlug) + 'Config';
+  const configVar = getFormConfigVar(pluginSettings.pluginSlug, childId);
   
   return `/**
  * Form Handler JavaScript
@@ -2796,6 +2804,7 @@ export function generateFormJS(form: Form): string {
                 ? mergedFormData 
                 : {
                     action: '${pluginSettings.pluginSlug.replace(/-/g, '_')}_submit',
+                    childId: '${childId || ''}',
                     nonce: config.nonce,
                     formData: JSON.stringify(mergedFormData)
                 };

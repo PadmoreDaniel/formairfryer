@@ -12,6 +12,12 @@ import {
   Condition,
   ConditionalNavigation,
   PostSubmissionRedirectRule,
+  Project,
+  ProjectDefaults,
+  ProjectPluginSettings,
+  LayoutDefaults,
+  FormInheritance,
+  CURRENT_SCHEMA_VERSION,
 } from '../types';
 
 // Generate unique IDs
@@ -134,6 +140,13 @@ export const defaultPluginSettings: PluginSettings = {
   menuLocation: 'settings',
 };
 
+// Default step layout values, shared by new steps and project inheritance.
+export const defaultLayoutDefaults: LayoutDefaults = {
+  gridColumns: 12,
+  gridGap: 16,
+  contentAlignment: 'left',
+};
+
 // Default Button Config
 export const defaultBackButton: ButtonConfig = {
   enabled: true,
@@ -197,39 +210,221 @@ export const createQuestion = (type: QuestionType, gridRow: number = 1): Questio
   return baseQuestion;
 };
 
-// Create a new step
-export const createStep = (index: number): Step => ({
-  id: generateId(),
-  title: `Step ${index + 1}`,
-  description: '',
-  questions: [],
-  gridColumns: 12,
-  gridGap: 16,
-  backButton: { ...defaultBackButton, enabled: index > 0 },
-  continueButton: { ...defaultContinueButton },
-  conditionalNavigation: [],
-  validateOnContinue: true,
-  autoAdvanceExcludeValues: [],
-});
+// Create a new step. Optionally seed layout values from project defaults.
+export const createStep = (index: number, layout?: LayoutDefaults): Step => {
+  const l = layout || defaultLayoutDefaults;
+  const step: Step = {
+    id: generateId(),
+    title: `Step ${index + 1}`,
+    description: '',
+    questions: [],
+    gridColumns: l.gridColumns,
+    gridGap: l.gridGap,
+    contentAlignment: l.contentAlignment,
+    backButton: { ...defaultBackButton, enabled: index > 0 },
+    continueButton: { ...defaultContinueButton },
+    conditionalNavigation: [],
+    validateOnContinue: true,
+    autoAdvanceExcludeValues: [],
+  };
+  if (l.minHeight !== undefined) {
+    step.minHeight = l.minHeight;
+  }
+  return step;
+};
 
-// Create a new form
-export const createForm = (): Form => {
-  const firstStep = createStep(0);
+export interface CreateFormOptions {
+  project?: Project;
+}
+
+// Create a new form. When a project is provided, the form is linked to the
+// project, inherits every section by default, and seeds its own copies of the
+// project defaults so the form remains self-contained for export.
+export const createForm = (options: CreateFormOptions = {}): Form => {
+  const { project } = options;
+  const layout = project?.defaults.layout || defaultLayoutDefaults;
+  const firstStep = createStep(0, layout);
   firstStep.backButton.enabled = false;
-  
-  return {
+
+  const base: Form = {
     id: generateId(),
     name: 'New Form',
     description: '',
     version: '1.0.0',
     steps: [firstStep],
-    theme: { ...defaultTheme, id: generateId() },
-    progressConfig: { ...defaultProgressConfig },
-    submissionConfig: { ...defaultSubmissionConfig },
+    theme: project ? cloneTheme(project.defaults.theme) : { ...defaultTheme, id: generateId() },
+    progressConfig: project ? { ...project.defaults.progress } : { ...defaultProgressConfig },
+    submissionConfig: project ? cloneSubmissionConfig(project.defaults.submission) : { ...defaultSubmissionConfig },
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    pluginSettings: { ...defaultPluginSettings },
+    pluginSettings: project ? projectPluginToFormPlugin(project.defaults.plugin) : { ...defaultPluginSettings },
+    schemaVersion: CURRENT_SCHEMA_VERSION,
   };
+
+  if (project) {
+    base.projectId = project.id;
+    base.childId = generateChildId(base.name);
+    base.inheritance = createDefaultInheritance(true);
+  } else {
+    base.inheritance = createDefaultInheritance(false);
+  }
+
+  return base;
+};
+
+// ==================== Project & Inheritance helpers ====================
+
+// Deep-ish clone of a theme with a fresh id.
+export const cloneTheme = (theme: Theme): Theme => ({
+  ...theme,
+  id: generateId(),
+  colors: { ...theme.colors },
+  typography: { ...theme.typography },
+  spacing: { ...theme.spacing },
+  borders: { ...theme.borders },
+  buttons: { ...theme.buttons },
+  inputs: { ...theme.inputs },
+  progressBar: { ...theme.progressBar },
+});
+
+// Clone a submission config (shallow arrays/objects copied).
+export const cloneSubmissionConfig = (config: SubmissionConfig): SubmissionConfig => ({
+  ...config,
+  headers: { ...config.headers },
+  includeFields: Array.isArray(config.includeFields) ? [...config.includeFields] : config.includeFields,
+  customFields: config.customFields ? config.customFields.map((f) => ({ ...f })) : [],
+  postSubmissionRules: config.postSubmissionRules
+    ? config.postSubmissionRules.map((r) => ({ ...r }))
+    : undefined,
+});
+
+// Convert project-level plugin settings into a form-level PluginSettings copy.
+export const projectPluginToFormPlugin = (plugin: ProjectPluginSettings): PluginSettings => ({
+  pluginName: plugin.pluginName,
+  pluginSlug: plugin.pluginSlug,
+  pluginVersion: plugin.pluginVersion,
+  pluginAuthor: plugin.pluginAuthor,
+  pluginDescription: plugin.pluginDescription,
+  shortcode: plugin.shortcode,
+  menuLocation: plugin.menuLocation,
+  menuIcon: plugin.menuIcon,
+  sentryDsn: plugin.sentryDsn,
+  showSkeleton: plugin.showSkeleton,
+});
+
+// Build an inheritance flag set. When `inherit` is true every section is
+// inherited from the project; otherwise all sections use form-level values.
+export const createDefaultInheritance = (inherit: boolean): FormInheritance => ({
+  theme: inherit,
+  layout: inherit,
+  progress: inherit,
+  submission: inherit,
+  plugin: inherit,
+});
+
+// Generate a stable, URL/shortcode-safe child id from a form name.
+export const generateChildId = (name: string): string => {
+  const slug = (name || 'form')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/(^_|_$)/g, '');
+  return slug || 'form_' + generateId();
+};
+
+// Default project-level plugin settings.
+export const createProjectPluginSettings = (name: string = 'New Project'): ProjectPluginSettings => {
+  const slug = (name || 'project')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '') || 'form-project';
+  return {
+    pluginName: name,
+    pluginSlug: slug,
+    pluginVersion: '1.0.0',
+    pluginAuthor: 'Form Builder',
+    pluginDescription: `Forms for ${name}`,
+    shortcode: slug.replace(/-/g, '_') || 'form_project',
+    menuLocation: 'settings',
+    showSkeleton: true,
+  };
+};
+
+// Default project defaults bundle.
+export const createProjectDefaults = (name: string = 'New Project'): ProjectDefaults => ({
+  theme: createDefaultTheme(),
+  layout: { ...defaultLayoutDefaults },
+  progress: { ...defaultProgressConfig },
+  submission: { ...defaultSubmissionConfig },
+  plugin: createProjectPluginSettings(name),
+});
+
+// Create a new empty project.
+export const createProject = (name: string = 'New Project'): Project => ({
+  id: generateId(),
+  name,
+  description: '',
+  schemaVersion: CURRENT_SCHEMA_VERSION,
+  defaults: createProjectDefaults(name),
+  formIds: [],
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+});
+
+// Upgrade a possibly-legacy form to the current schema. Legacy forms have no
+// project linkage or inheritance flags; they become standalone forms whose
+// sections all use their own (existing) values, preserving current visuals.
+export const migrateForm = (form: Form): Form => {
+  const migrated: Form = { ...form };
+  if (migrated.schemaVersion === undefined || migrated.schemaVersion < CURRENT_SCHEMA_VERSION) {
+    if (!migrated.inheritance) {
+      // A form linked to a project defaults to inheriting; a standalone legacy
+      // form keeps its own values (no inheritance) to avoid visual drift.
+      migrated.inheritance = createDefaultInheritance(false);
+    }
+    if (migrated.projectId && !migrated.childId) {
+      migrated.childId = generateChildId(migrated.name);
+    }
+    migrated.schemaVersion = CURRENT_SCHEMA_VERSION;
+  }
+  return migrated;
+};
+
+// Resolve the "effective" form used for preview, export and runtime by
+// merging project defaults into inherited sections. The result is a new form
+// object; the original form (which stores overrides) is not mutated.
+export const resolveEffectiveForm = (form: Form, project?: Project | null): Form => {
+  if (!project || !form.inheritance) {
+    return form;
+  }
+  const inh = form.inheritance;
+  const d = project.defaults;
+  const effective: Form = { ...form };
+
+  if (inh.theme) {
+    effective.theme = cloneTheme(d.theme);
+  }
+  if (inh.progress) {
+    effective.progressConfig = { ...d.progress };
+  }
+  if (inh.submission) {
+    // Preserve form-specific submission destination fields when present,
+    // otherwise fall back entirely to project defaults.
+    effective.submissionConfig = cloneSubmissionConfig(d.submission);
+  }
+  if (inh.plugin) {
+    effective.pluginSettings = projectPluginToFormPlugin(d.plugin);
+  }
+  if (inh.layout) {
+    effective.steps = form.steps.map((step) => ({
+      ...step,
+      gridColumns: d.layout.gridColumns,
+      gridGap: d.layout.gridGap,
+      contentAlignment: d.layout.contentAlignment,
+      minHeight: d.layout.minHeight !== undefined ? d.layout.minHeight : step.minHeight,
+    }));
+  }
+
+  return effective;
 };
 
 // Helper functions

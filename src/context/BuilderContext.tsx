@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useReducer, ReactNode } from 'react';
-import { Form, Step, Question, Theme, BuilderState, QuestionType, ConditionalNavigation, ProgressConfig, SubmissionConfig, PluginSettings } from '../types';
-import { createForm, createStep, createQuestion, generateId } from '../utils/defaults';
+import { Form, Step, Question, Theme, BuilderState, QuestionType, ConditionalNavigation, ProgressConfig, SubmissionConfig, PluginSettings, Project, ProjectDefaults, FormInheritance } from '../types';
+import { createForm, createStep, createQuestion, generateId, migrateForm, resolveEffectiveForm } from '../utils/defaults';
 
 // Action Types
 type BuilderAction =
@@ -30,11 +30,15 @@ type BuilderAction =
   | { type: 'REDO' }
   | { type: 'RESET_FORM' }
   | { type: 'IMPORT_FORM'; payload: Form }
+  | { type: 'SET_PROJECT'; payload: Project | null }
+  | { type: 'UPDATE_PROJECT_DEFAULTS'; payload: Partial<ProjectDefaults> }
+  | { type: 'UPDATE_FORM_INHERITANCE'; payload: Partial<FormInheritance> }
   | { type: 'MARK_SAVED' };
 
 // Initial State
 const initialState: BuilderState = {
   form: createForm(),
+  currentProject: null,
   selectedStepId: null,
   selectedQuestionId: null,
   previewMode: false,
@@ -85,7 +89,12 @@ function builderReducer(state: BuilderState, action: BuilderAction): BuilderStat
     }
 
     case 'ADD_STEP': {
-      const newStep = createStep(state.form.steps.length);
+      // Seed new steps from the project's layout defaults when the form
+      // inherits layout, so added steps stay visually consistent.
+      const layout = (state.currentProject && state.form.inheritance?.layout)
+        ? state.currentProject.defaults.layout
+        : undefined;
+      const newStep = createStep(state.form.steps.length, layout);
       let newSteps: Step[];
       
       if (action.payload?.afterStepId) {
@@ -485,11 +494,49 @@ function builderReducer(state: BuilderState, action: BuilderAction): BuilderStat
     }
 
     case 'IMPORT_FORM': {
+      const imported = migrateForm(action.payload);
       return saveToHistory({
         ...state,
-        form: action.payload,
-        selectedStepId: action.payload.steps[0]?.id || null,
+        form: imported,
+        selectedStepId: imported.steps[0]?.id || null,
         selectedQuestionId: null,
+      });
+    }
+
+    case 'SET_PROJECT': {
+      return {
+        ...state,
+        currentProject: action.payload,
+      };
+    }
+
+    case 'UPDATE_PROJECT_DEFAULTS': {
+      if (!state.currentProject) return state;
+      return {
+        ...state,
+        currentProject: {
+          ...state.currentProject,
+          defaults: {
+            ...state.currentProject.defaults,
+            ...action.payload,
+          },
+          updatedAt: new Date().toISOString(),
+        },
+        isDirty: true,
+      };
+    }
+
+    case 'UPDATE_FORM_INHERITANCE': {
+      const current = state.form.inheritance || {
+        theme: false, layout: false, progress: false, submission: false, plugin: false,
+      };
+      return saveToHistory({
+        ...state,
+        form: {
+          ...state.form,
+          inheritance: { ...current, ...action.payload },
+          updatedAt: new Date().toISOString(),
+        },
       });
     }
 
@@ -514,6 +561,9 @@ interface BuilderContextType {
   getSelectedQuestion: () => Question | null;
   getAllQuestions: () => Question[];
   loadForm: (config: any) => void;
+  // Returns the form with inherited sections resolved against the current
+  // project. Use this for preview and export, not for editing.
+  getEffectiveForm: () => Form;
 }
 
 const BuilderContext = createContext<BuilderContextType | null>(null);
@@ -547,6 +597,10 @@ export function BuilderProvider({ children }: BuilderProviderProps) {
     return state.form.steps.flatMap(step => step.questions);
   };
 
+  const getEffectiveForm = (): Form => {
+    return resolveEffectiveForm(state.form, state.currentProject);
+  };
+
   const loadForm = (config: any) => {
     // Convert FormConfig to Form if needed
     const form: Form = {
@@ -560,12 +614,16 @@ export function BuilderProvider({ children }: BuilderProviderProps) {
       pluginSettings: config.pluginSettings || state.form.pluginSettings,
       createdAt: config.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      schemaVersion: config.schemaVersion,
+      projectId: config.projectId,
+      childId: config.childId,
+      inheritance: config.inheritance,
     };
-    dispatch({ type: 'IMPORT_FORM', payload: form });
+    dispatch({ type: 'IMPORT_FORM', payload: migrateForm(form) });
   };
 
   return (
-    <BuilderContext.Provider value={{ state, dispatch, getSelectedStep, getSelectedQuestion, getAllQuestions, loadForm }}>
+    <BuilderContext.Provider value={{ state, dispatch, getSelectedStep, getSelectedQuestion, getAllQuestions, loadForm, getEffectiveForm }}>
       {children}
     </BuilderContext.Provider>
   );

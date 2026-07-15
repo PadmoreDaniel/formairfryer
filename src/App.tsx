@@ -4,14 +4,15 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { FormBuilder } from './components/FormBuilder';
 import { LoginPage } from './components/LoginPage';
 import { FormsList } from './components/FormsList';
-import { Form } from './types';
+import { createForm } from './utils/defaults';
+import { Form, Project } from './types';
 import './styles/main.css';
 
 type AppView = 'login' | 'forms-list' | 'builder';
 
 function AppContent() {
   const { user, loading: authLoading } = useAuth();
-  const { loadForm } = useBuilder();
+  const { loadForm, dispatch } = useBuilder();
   const [currentView, setCurrentView] = useState<AppView>(user ? 'builder' : 'login');
   const [loadedFormId, setLoadedFormId] = useState<string | null>(null);
 
@@ -22,13 +23,20 @@ function AppContent() {
     }
   }, [user, currentView]);
 
-  const handleLoadForm = (form: Form, firestoreId?: string) => {
+  const handleLoadForm = (form: Form, firestoreId: string | undefined, project: Project | null) => {
+    dispatch({ type: 'SET_PROJECT', payload: project });
     loadForm(form);
     setLoadedFormId(firestoreId || null);
     setCurrentView('builder');
   };
 
-  const handleNewForm = () => {
+  const handleNewForm = (project: Project | null) => {
+    dispatch({ type: 'SET_PROJECT', payload: project });
+    if (project) {
+      dispatch({ type: 'IMPORT_FORM', payload: createForm({ project }) });
+    } else {
+      dispatch({ type: 'RESET_FORM' });
+    }
     setLoadedFormId(null);
     setCurrentView('builder');
   };

@@ -1,10 +1,20 @@
 import React, { useState } from 'react';
 import { useBuilder } from '../context/BuilderContext';
 import { PostSubmissionRulesEditor } from './PostSubmissionRulesEditor';
+import { InheritableSection } from '../types';
+
+const inheritanceSections: { key: InheritableSection; label: string; hint: string }[] = [
+  { key: 'theme', label: 'Theme', hint: 'Colors, typography, spacing, borders, buttons and inputs.' },
+  { key: 'layout', label: 'Step layout', hint: 'Grid columns, gaps, min height and content alignment.' },
+  { key: 'progress', label: 'Progress bar', hint: 'Progress mode, position and animation.' },
+  { key: 'submission', label: 'Submission', hint: 'Thank-you behavior, redirects and destination defaults.' },
+  { key: 'plugin', label: 'Plugin / export', hint: 'Plugin name, slug and shortcode.' },
+];
 
 export function FormSettings() {
   const { state, dispatch } = useBuilder();
   const { form } = state;
+  const currentProject = state.currentProject;
   const [activeTab, setActiveTab] = useState<'general' | 'submission' | 'plugin'>('general');
 
   const updateForm = (updates: Partial<typeof form>) => {
@@ -88,6 +98,59 @@ export function FormSettings() {
                 placeholder="Your name"
               />
             </div>
+
+            {currentProject && (
+              <div className="project-inheritance">
+                <div className="form-group">
+                  <label>Project</label>
+                  <input type="text" value={currentProject.name} disabled />
+                  <p className="field-hint">
+                    This form belongs to a project. Inherited sections stay in sync
+                    with the project's design system.
+                  </p>
+                </div>
+
+                <div className="form-group">
+                  <label>Form ID (shortcode)</label>
+                  <input
+                    type="text"
+                    value={form.childId || ''}
+                    onChange={(e) =>
+                      updateForm({
+                        childId: e.target.value
+                          .toLowerCase()
+                          .replace(/[^a-z0-9]+/g, '_')
+                          .replace(/(^_|_$)/g, ''),
+                      })
+                    }
+                    placeholder="contact_form"
+                  />
+                  <p className="field-hint">
+                    Embed with <code>[{currentProject.defaults.plugin.shortcode} id="{form.childId || 'form_id'}"]</code>
+                  </p>
+                </div>
+
+                <label className="inheritance-title">Inherit from project</label>
+                {inheritanceSections.map((section) => (
+                  <div className="form-group checkbox-group" key={section.key}>
+                    <label className="checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={!!form.inheritance?.[section.key]}
+                        onChange={(e) =>
+                          dispatch({
+                            type: 'UPDATE_FORM_INHERITANCE',
+                            payload: { [section.key]: e.target.checked },
+                          })
+                        }
+                      />
+                      <span>{section.label}</span>
+                    </label>
+                    <p className="field-hint">{section.hint}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

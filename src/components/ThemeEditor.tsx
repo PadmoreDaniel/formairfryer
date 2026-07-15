@@ -7,11 +7,22 @@ type TabType = 'colors' | 'typography' | 'spacing' | 'borders' | 'buttons' | 'in
 
 export function ThemeEditor() {
   const { state, dispatch } = useBuilder();
-  const { theme } = state.form;
+  const project = state.currentProject;
+  // When the current form inherits its theme from a project, editing here
+  // updates the project defaults so every inheriting form stays consistent.
+  const editingProjectTheme = !!(project && state.form.inheritance?.theme);
+  const theme = editingProjectTheme ? project!.defaults.theme : state.form.theme;
   const [activeTab, setActiveTab] = useState<TabType>('colors');
 
   const updateTheme = (updates: Partial<Theme>) => {
-    dispatch({ type: 'UPDATE_THEME', payload: updates });
+    if (editingProjectTheme && project) {
+      dispatch({
+        type: 'UPDATE_PROJECT_DEFAULTS',
+        payload: { theme: { ...project.defaults.theme, ...updates } },
+      });
+    } else {
+      dispatch({ type: 'UPDATE_THEME', payload: updates });
+    }
   };
 
   const updateColors = (updates: Partial<ThemeColors>) => {
@@ -44,7 +55,14 @@ export function ThemeEditor() {
 
   const resetTheme = () => {
     if (window.confirm('Reset theme to defaults?')) {
-      dispatch({ type: 'SET_THEME', payload: { ...defaultTheme, id: generateId() } });
+      if (editingProjectTheme && project) {
+        dispatch({
+          type: 'UPDATE_PROJECT_DEFAULTS',
+          payload: { theme: { ...defaultTheme, id: generateId() } },
+        });
+      } else {
+        dispatch({ type: 'SET_THEME', payload: { ...defaultTheme, id: generateId() } });
+      }
     }
   };
 
@@ -67,6 +85,12 @@ export function ThemeEditor() {
           Reset to Default
         </button>
       </div>
+
+      {editingProjectTheme && (
+        <div className="project-edit-banner">
+          🎨 Editing the <strong>{project!.name}</strong> project theme. Changes apply to all forms that inherit it.
+        </div>
+      )}
 
       <div className="form-group">
         <label>Theme Name</label>

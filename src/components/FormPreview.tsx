@@ -4,8 +4,11 @@ import { Question, Condition, ConditionRule } from '../types';
 import { getTrackingData } from '../utils/trackingData';
 
 export function FormPreview() {
-  const { state, dispatch } = useBuilder();
-  const { form, previewMode } = state;
+  const { state, dispatch, getEffectiveForm } = useBuilder();
+  const { previewMode } = state;
+  // Render the form with inherited project sections resolved so the preview
+  // matches exactly what the exported plugin will render.
+  const form = getEffectiveForm();
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});

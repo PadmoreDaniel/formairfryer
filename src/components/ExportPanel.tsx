@@ -1,12 +1,17 @@
 import React, { useRef, useState } from 'react';
 import { useBuilder } from '../context/BuilderContext';
-import { downloadFormJSON, downloadWordPressPlugin, importFormFromJSON } from '../utils/exportUtils';
+import { useAuth } from '../context/AuthContext';
+import { downloadFormJSON, downloadWordPressPlugin, downloadWordPressProjectPlugin, importFormFromJSON } from '../utils/exportUtils';
+import { getProjectForms } from '../services/formService';
+import { Form } from '../types';
 import { AIFormGenerator } from './AIFormGenerator';
 import { formTemplates, FormTemplate } from '../utils/formTemplates';
 
 export function ExportPanel() {
   const { state, dispatch, loadForm } = useBuilder();
+  const { user } = useAuth();
   const { form } = state;
+  const currentProject = state.currentProject;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
@@ -41,6 +46,37 @@ export function ExportPanel() {
 
   const handleImportClick = () => {
     fileInputRef.current?.click();
+  };
+
+  const handleExportProjectPlugin = async () => {
+    if (!currentProject) return;
+    setIsExporting(true);
+    setExportStatus('Generating project plugin...');
+    try {
+      let children: Form[] = [];
+      if (user) {
+        const saved = await getProjectForms(user.uid, currentProject.id);
+        children = saved.map((s) => s.form);
+      }
+      // Include the current in-memory form (with any unsaved edits).
+      const idx = children.findIndex((f) => f.id === form.id);
+      if (idx >= 0) {
+        children[idx] = form;
+      } else {
+        children.push(form);
+      }
+      if (children.length === 0) {
+        children = [form];
+      }
+      await downloadWordPressProjectPlugin(currentProject, children);
+      setExportStatus(`Project plugin exported with ${children.length} form(s)!`);
+    } catch (error) {
+      console.error('Project export failed:', error);
+      setExportStatus('Failed to export project plugin. Please try again.');
+    } finally {
+      setIsExporting(false);
+      setTimeout(() => setExportStatus(null), 5000);
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -166,6 +202,32 @@ export function ExportPanel() {
           </button>
         </div>
       </div>
+
+      {currentProject && (
+        <div className="export-section">
+          <h4>Export Project Plugin</h4>
+          <p className="export-description">
+            Package every form in <strong>{currentProject.name}</strong> into a
+            single WordPress plugin. Embed each form with a shared shortcode:
+          </p>
+          <code className="preview-value">
+            [{currentProject.defaults.plugin.shortcode} id="form_id"]
+          </code>
+          <ul className="export-features">
+            <li>✅ One plugin for the whole project</li>
+            <li>✅ Shared, consistent design system</li>
+            <li>✅ Per-form shortcode ids</li>
+            <li>✅ Multiple forms per page supported</li>
+          </ul>
+          <button
+            className="btn-export btn-primary"
+            onClick={handleExportProjectPlugin}
+            disabled={isExporting}
+          >
+            {isExporting ? '⏳ Generating...' : '📦 Download Project Plugin'}
+          </button>
+        </div>
+      )}
 
       <div className="export-section">
         <h4>Export as WordPress Plugin</h4>

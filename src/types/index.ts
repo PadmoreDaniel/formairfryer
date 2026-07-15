@@ -350,6 +350,85 @@ export interface Form {
   author?: string;
   // Plugin settings
   pluginSettings: PluginSettings;
+  // ==================== Project linkage (v2) ====================
+  // Current schema version for migration handling.
+  schemaVersion?: number;
+  // Owning project id (undefined for legacy standalone forms).
+  projectId?: string;
+  // Stable identifier used by the project shortcode: [project_shortcode id="childId"].
+  childId?: string;
+  // Per-section inheritance flags. When true, the section is taken from the
+  // owning project's defaults; when false, the form's own values are used.
+  inheritance?: FormInheritance;
+}
+
+// ==================== Project & Inheritance (v2) ====================
+// Current schema version for forms and projects. Bump when the persisted
+// shape changes so migration transforms can upgrade older records.
+export const CURRENT_SCHEMA_VERSION = 2;
+
+// Sections of a form that can be inherited from a project.
+export type InheritableSection =
+  | 'theme'
+  | 'layout'
+  | 'progress'
+  | 'submission'
+  | 'plugin';
+
+// Per-section inherit vs override toggles for a child form.
+export interface FormInheritance {
+  theme: boolean;
+  layout: boolean;
+  progress: boolean;
+  submission: boolean;
+  plugin: boolean;
+}
+
+// Layout defaults applied to new steps and inherited by child forms.
+export interface LayoutDefaults {
+  gridColumns: number;
+  gridGap: number;
+  minHeight?: number;
+  contentAlignment: ContentAlignment;
+}
+
+// Project-level plugin/export settings. The shortcode here is the plugin's
+// shortcode tag; individual child forms are addressed via the id attribute.
+export interface ProjectPluginSettings {
+  pluginName: string;
+  pluginSlug: string;
+  pluginVersion: string;
+  pluginAuthor: string;
+  pluginDescription: string;
+  shortcode: string;
+  menuLocation: 'settings' | 'tools' | 'toplevel';
+  menuIcon?: string;
+  sentryDsn?: string;
+  showSkeleton?: boolean;
+}
+
+// Shared defaults that child forms inherit unless they override a section.
+export interface ProjectDefaults {
+  theme: Theme;
+  layout: LayoutDefaults;
+  progress: ProgressConfig;
+  submission: SubmissionConfig;
+  plugin: ProjectPluginSettings;
+}
+
+// A Project houses multiple child forms and owns shared design/behavior
+// defaults, and is the unit of WordPress plugin export.
+export interface Project {
+  id: string;
+  name: string;
+  description?: string;
+  schemaVersion: number;
+  defaults: ProjectDefaults;
+  // Ordered list of child form ids belonging to this project.
+  formIds: string[];
+  createdAt: string;
+  updatedAt: string;
+  author?: string;
 }
 
 export interface PluginSettings {
@@ -368,6 +447,9 @@ export interface PluginSettings {
 // ==================== Builder State ====================
 export interface BuilderState {
   form: Form;
+  // Owning project of the current form, if any. Holds shared defaults that
+  // inherited sections resolve against.
+  currentProject: Project | null;
   selectedStepId: string | null;
   selectedQuestionId: string | null;
   previewMode: boolean;
@@ -381,6 +463,15 @@ export interface FormExport {
   version: string;
   exportedAt: string;
   form: Form;
+}
+
+// Project JSON export bundles the project and all of its child forms so the
+// package is fully self-contained and can be re-imported later.
+export interface ProjectExport {
+  version: string;
+  exportedAt: string;
+  project: Project;
+  forms: Form[];
 }
 
 // ==================== Utility Types ====================
