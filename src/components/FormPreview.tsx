@@ -622,8 +622,13 @@ export function FormPreview() {
     if (currentStep.autoAdvance && currentStep.questions.length === 1) {
       const excludedValues = currentStep.autoAdvanceExcludeValues || [];
       const shouldExcludeByValue = typeof value === 'string' && excludedValues.includes(value);
-      const selectedOption = (question.options || []).find((option) => option.value === value);
-      const isCustomInputRadio = question.type === 'radio' && !!selectedOption?.allowCustomInput;
+      const hasCustomInputRadioOption =
+        question.type === 'radio' && (question.options || []).some((option) => option.allowCustomInput);
+      const fixedRadioValues = new Set(
+        (question.options || []).filter((option) => !option.allowCustomInput).map((option) => option.value)
+      );
+      const isCustomInputRadio =
+        hasCustomInputRadioOption && typeof value === 'string' && !fixedRadioValues.has(value);
 
       // Check if the question has a valid value
       const hasValidValue = value !== '' && value !== null && value !== undefined && 

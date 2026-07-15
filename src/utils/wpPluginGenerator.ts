@@ -2553,10 +2553,15 @@ export function generateFormJS(form: Form): string {
                 ? stepConfig.autoAdvanceExcludeValues
                 : [];
               const shouldExcludeByValue = typeof value === 'string' && excludedValues.includes(value);
-              const selectedOption = Array.isArray(question.options)
-                ? question.options.find(opt => String(opt.value) === String(value))
-                : null;
-              const isCustomInputRadio = question.type === 'radio' && selectedOption && selectedOption.allowCustomInput;
+                const hasCustomInputRadioOption = question.type === 'radio' && Array.isArray(question.options)
+                  ? question.options.some(opt => !!opt.allowCustomInput)
+                  : false;
+                const fixedRadioValues = new Set(
+                  Array.isArray(question.options)
+                    ? question.options.filter(opt => !opt.allowCustomInput).map(opt => String(opt.value))
+                    : []
+                );
+                const isCustomInputRadio = hasCustomInputRadioOption && typeof value === 'string' && !fixedRadioValues.has(String(value));
                 
                 // Check if the question has a valid value
                 const hasValidValue = value !== '' && value !== null && value !== undefined && 
