@@ -360,12 +360,14 @@ export interface Form {
   // Per-section inheritance flags. When true, the section is taken from the
   // owning project's defaults; when false, the form's own values are used.
   inheritance?: FormInheritance;
+  // Optional analytics tracking configuration for live (exported) forms.
+  analyticsConfig?: AnalyticsConfig;
 }
 
 // ==================== Project & Inheritance (v2) ====================
 // Current schema version for forms and projects. Bump when the persisted
 // shape changes so migration transforms can upgrade older records.
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 // Sections of a form that can be inherited from a project.
 export type InheritableSection =
@@ -373,7 +375,8 @@ export type InheritableSection =
   | 'layout'
   | 'progress'
   | 'submission'
-  | 'plugin';
+  | 'plugin'
+  | 'analytics';
 
 // Per-section inherit vs override toggles for a child form.
 export interface FormInheritance {
@@ -382,6 +385,15 @@ export interface FormInheritance {
   progress: boolean;
   submission: boolean;
   plugin: boolean;
+  analytics: boolean;
+}
+
+// Privacy-safe analytics configuration. Endpoint and write key are supplied at
+// export time from build environment variables; this only stores whether
+// tracking is enabled and an optional client-side sampling rate (0..1).
+export interface AnalyticsConfig {
+  enabled: boolean;
+  sampleRate?: number;
 }
 
 // Layout defaults applied to new steps and inherited by child forms.
@@ -414,6 +426,7 @@ export interface ProjectDefaults {
   progress: ProgressConfig;
   submission: SubmissionConfig;
   plugin: ProjectPluginSettings;
+  analytics: AnalyticsConfig;
 }
 
 // A Project houses multiple child forms and owns shared design/behavior

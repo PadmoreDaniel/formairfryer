@@ -15,9 +15,10 @@ interface FormsListProps {
   onLoadForm: (form: Form, firestoreId: string | undefined, project: Project | null) => void;
   onNewForm: (project: Project | null) => void;
   onBack: () => void;
+  onViewAnalytics?: (formId: string) => void;
 }
 
-export function FormsList({ onLoadForm, onNewForm, onBack }: FormsListProps) {
+export function FormsList({ onLoadForm, onNewForm, onBack, onViewAnalytics }: FormsListProps) {
   const { user } = useAuth();
   const [forms, setForms] = useState<SavedForm[]>([]);
   const [projects, setProjects] = useState<SavedProject[]>([]);
@@ -237,6 +238,15 @@ export function FormsList({ onLoadForm, onNewForm, onBack }: FormsListProps) {
                 >
                   Edit Form
                 </button>
+                {onViewAnalytics && (
+                  <button
+                    className="btn-load-form"
+                    onClick={() => onViewAnalytics(savedForm.form.id)}
+                    title="View analytics"
+                  >
+                    📊 Analytics
+                  </button>
+                )}
                 <button
                   className="btn-delete-form"
                   onClick={() => handleDelete(savedForm.id!, savedForm.form.name)}

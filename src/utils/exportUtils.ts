@@ -2,6 +2,11 @@ import { Form, FormExport, Project, ProjectExport } from '../types';
 import { generateThemeCSS, generateFormHTML, generateFormJS, getGoogleFontsUrl, getFormConfigVar } from './wpPluginGenerator';
 import { resolveEffectiveForm, generateChildId, projectPluginToFormPlugin } from './defaults';
 
+// Analytics ingestion endpoint + write key are provided at build time. When
+// the endpoint is empty, analytics is effectively disabled in exports.
+const ANALYTICS_ENDPOINT = process.env.REACT_APP_ANALYTICS_ENDPOINT || '';
+const ANALYTICS_WRITE_KEY = process.env.REACT_APP_ANALYTICS_WRITE_KEY || '';
+
 // Export form as JSON
 export function exportFormAsJSON(form: Form): string {
   const exportData: FormExport = {
@@ -208,11 +213,21 @@ export async function downloadWordPressProjectPlugin(project: Project, forms: Fo
 // Build the PHP `$forms` registry literal used by the main plugin class.
 function buildFormsRegistryPhp(children: ResolvedChild[]): string {
   return children
-    .map((c) => `        '${c.childId}' => array(
+    .map((c) => {
+      const ac = c.form.analyticsConfig;
+      const anEnabled = !!(ac && ac.enabled) && !!ANALYTICS_ENDPOINT;
+      const sampleRate = ac && typeof ac.sampleRate === 'number' ? ac.sampleRate : 1;
+      return `        '${c.childId}' => array(
             'name' => '${escapePhp(c.form.name)}',
             'configVar' => '${c.configVar}',
             'fontsUrl' => '${c.fontsUrl}',
-        ),`)
+            'analyticsEnabled' => ${anEnabled ? 'true' : 'false'},
+            'analyticsFormId' => '${escapePhp(c.form.id)}',
+            'analyticsProjectId' => '${escapePhp(c.form.projectId || '')}',
+            'analyticsFormVersion' => '${escapePhp(c.form.version || '')}',
+            'analyticsSampleRate' => ${sampleRate},
+        ),`;
+    })
     .join('\n');
 }
 
@@ -323,6 +338,14 @@ ${plugin.sentryDsn ? `            if (!wp_script_is('${plugin.pluginSlug}-sentry
             'cssUrl' => $css_url,
             'pluginSlug' => '${plugin.pluginSlug}',
             'childId' => $child_id,
+            'analyticsEnabled' => !empty($form['analyticsEnabled']),
+            'analyticsEndpoint' => '${escapePhp(ANALYTICS_ENDPOINT)}',
+            'analyticsWriteKey' => '${escapePhp(ANALYTICS_WRITE_KEY)}',
+            'analyticsFormId' => isset($form['analyticsFormId']) ? $form['analyticsFormId'] : '',
+            'analyticsProjectId' => isset($form['analyticsProjectId']) ? $form['analyticsProjectId'] : '',
+            'analyticsChildId' => $child_id,
+            'analyticsFormVersion' => isset($form['analyticsFormVersion']) ? $form['analyticsFormVersion'] : '',
+            'analyticsSampleRate' => isset($form['analyticsSampleRate']) ? $form['analyticsSampleRate'] : 1,
             'debug' => true${plugin.sentryDsn ? `,
             'sentryDsn' => '${escapePhp(plugin.sentryDsn)}'` : ''}
         );
@@ -764,6 +787,14 @@ ${googleFontsUrl ? `        wp_enqueue_style('${pluginSettings.pluginSlug}-googl
             'formConfig' => $form_config,
             'cssUrl' => $css_url,
             'pluginSlug' => '${pluginSettings.pluginSlug}',
+            'analyticsEnabled' => ${(!!(form.analyticsConfig && form.analyticsConfig.enabled) && !!ANALYTICS_ENDPOINT) ? 'true' : 'false'},
+            'analyticsEndpoint' => '${escapePhp(ANALYTICS_ENDPOINT)}',
+            'analyticsWriteKey' => '${escapePhp(ANALYTICS_WRITE_KEY)}',
+            'analyticsFormId' => '${escapePhp(form.id)}',
+            'analyticsProjectId' => '${escapePhp(form.projectId || '')}',
+            'analyticsChildId' => '${escapePhp(form.childId || '')}',
+            'analyticsFormVersion' => '${escapePhp(form.version || '')}',
+            'analyticsSampleRate' => ${form.analyticsConfig && typeof form.analyticsConfig.sampleRate === 'number' ? form.analyticsConfig.sampleRate : 1},
             'debug' => true,
             'configPath' => ${pluginSettings.pluginSlug.toUpperCase().replace(/-/g, '_')}_PLUGIN_DIR . 'form-config.json'${pluginSettings.sentryDsn ? `,
             'sentryDsn' => '${pluginSettings.sentryDsn.replace(/\\/g, '\\\\\\\\').replace(/'/g, "\\\\'")}'` : ''}

@@ -6,10 +6,11 @@ interface HeaderProps {
   onPreview: () => void;
   onSave: () => void;
   onShowFormsList?: () => void;
+  onShowAnalytics?: () => void;
   saving?: boolean;
 }
 
-export function Header({ onPreview, onSave, onShowFormsList, saving }: HeaderProps) {
+export function Header({ onPreview, onSave, onShowFormsList, onShowAnalytics, saving }: HeaderProps) {
   const { state, dispatch } = useBuilder();
   const { user, logout } = useAuth();
   const { form, isDirty, historyIndex, history } = state;
@@ -82,6 +83,11 @@ export function Header({ onPreview, onSave, onShowFormsList, saving }: HeaderPro
         {onShowFormsList && (
           <button className="btn btn-outline" onClick={onShowFormsList}>
             My Forms
+          </button>
+        )}
+        {onShowAnalytics && (
+          <button className="btn btn-outline" onClick={onShowAnalytics}>
+            📊 Analytics
           </button>
         )}
         <button className="btn btn-outline" onClick={handleNewForm}>

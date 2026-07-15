@@ -20,6 +20,7 @@ type RightPanelTab = 'question' | 'theme' | 'progress' | 'navigation' | 'flow' |
 
 interface FormBuilderProps {
   onShowFormsList?: () => void;
+  onShowAnalytics?: () => void;
   loadedFormId?: string | null;
   // Only restore the auto-saved localStorage draft when true (initial entry).
   // Explicit new/loaded entries pass false so they aren't overwritten.
@@ -127,7 +128,7 @@ function ResizeHandle({ ariaLabel, min, max, value, onResize, grow }: ResizeHand
   );
 }
 
-export function FormBuilder({ onShowFormsList, loadedFormId, restoreDraft = true }: FormBuilderProps) {
+export function FormBuilder({ onShowFormsList, onShowAnalytics, loadedFormId, restoreDraft = true }: FormBuilderProps) {
   const { state, dispatch, getSelectedStep } = useBuilder();
   const { user } = useAuth();
   const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>('question');
@@ -265,6 +266,7 @@ export function FormBuilder({ onShowFormsList, loadedFormId, restoreDraft = true
         onPreview={handlePreview} 
         onSave={handleSave} 
         onShowFormsList={onShowFormsList}
+        onShowAnalytics={onShowAnalytics}
         saving={saving}
       />
 

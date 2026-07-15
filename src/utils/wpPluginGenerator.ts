@@ -1630,6 +1630,113 @@ export function generateFormJS(form: Form, childId?: string): string {
         });
         log('Data Layer Event fired:', eventName, data);
     }
+
+    // ==================== Analytics (privacy-safe, step-level) ====================
+    // Emits anonymous funnel/timing events to the configured endpoint. NEVER
+    // includes answer values or PII — only step ids/indexes, timings, device,
+    // and coarse traffic source. No-op unless enabled and an endpoint is set.
+    var analytics = (function() {
+        var enabled = !!config.analyticsEnabled && !!config.analyticsEndpoint;
+        var endpoint = config.analyticsEndpoint || '';
+        var writeKey = config.analyticsWriteKey || '';
+        var formId = config.analyticsFormId || (formConfig.id || '');
+        var projectId = config.analyticsProjectId || '';
+        var childId = config.analyticsChildId || '';
+        var formVersion = config.analyticsFormVersion || (formConfig.version || '');
+        var sampleRate = typeof config.analyticsSampleRate === 'number' ? config.analyticsSampleRate : 1;
+
+        // Client-side sampling.
+        if (enabled && sampleRate < 1 && Math.random() > sampleRate) { enabled = false; }
+
+        function uuid() {
+            try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+                var r = Math.random() * 16 | 0; var v = c === 'x' ? r : (r & 0x3 | 0x8); return v.toString(16);
+            });
+        }
+        function deviceBucket() {
+            var ua = navigator.userAgent || '';
+            if (/iPad|Tablet/i.test(ua)) return 'tablet';
+            if (/Mobi|Android|iPhone|iPod/i.test(ua)) return 'mobile';
+            return 'desktop';
+        }
+        function getSource() {
+            try {
+                var params = new URLSearchParams(window.location.search || '');
+                var utm = {};
+                ['utm_source', 'utm_medium', 'utm_campaign'].forEach(function(k) { var v = params.get(k); if (v) utm[k] = v; });
+                var ref = '';
+                try { ref = localStorage.getItem('referrer') || document.referrer || ''; } catch (e) { ref = document.referrer || ''; }
+                var refHost = '';
+                try { refHost = ref ? new URL(ref, window.location.origin).hostname : ''; } catch (e) { refHost = ''; }
+                return { referrer: refHost, utm: utm };
+            } catch (e) { return { referrer: '', utm: {} }; }
+        }
+
+        var sessionKey = 'fa_an_sid_' + formId;
+        var sessionId = '';
+        try { sessionId = sessionStorage.getItem(sessionKey) || ''; } catch (e) {}
+        if (!sessionId) { sessionId = uuid(); try { sessionStorage.setItem(sessionKey, sessionId); } catch (e) {} }
+
+        var src = getSource();
+        var queue = [];
+        var startedAt = Date.now();
+        var stepEnterTs = 0;
+        var reachedMaxIdx = 0;
+        var flushTimer = null;
+        var ended = false;
+
+        function baseCtx() {
+            return {
+                sessionId: sessionId, formId: formId, projectId: projectId, childId: childId,
+                formVersion: formVersion, device: deviceBucket(), referrer: src.referrer, utm: src.utm,
+                host: window.location.hostname, lang: navigator.language || '',
+                screen: (window.screen ? (window.screen.width + 'x' + window.screen.height) : ''),
+                tz: (function(){ try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch(e){ return ''; } })()
+            };
+        }
+        function send(useBeacon) {
+            if (!enabled || queue.length === 0) return;
+            var payload = { writeKey: writeKey, context: baseCtx(), events: queue.slice() };
+            queue = [];
+            var body = JSON.stringify(payload);
+            try {
+                if (useBeacon && navigator.sendBeacon) {
+                    navigator.sendBeacon(endpoint, new Blob([body], { type: 'text/plain' }));
+                    return;
+                }
+            } catch (e) {}
+            try {
+                fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: body, keepalive: true, mode: 'cors' }).catch(function() {});
+            } catch (e) {}
+        }
+        function scheduleFlush() {
+            if (flushTimer) return;
+            flushTimer = setTimeout(function() { flushTimer = null; send(false); }, 3000);
+        }
+        function track(type, props) {
+            if (!enabled) return;
+            var ev = { type: type, t: Date.now() };
+            if (props) { for (var k in props) { if (Object.prototype.hasOwnProperty.call(props, k)) ev[k] = props[k]; } }
+            queue.push(ev);
+            if (queue.length >= 10) send(false); else scheduleFlush();
+        }
+        return {
+            isEnabled: function() { return enabled; },
+            formView: function() { track('form_view', {}); },
+            start: function() { track('form_start', {}); },
+            enterStep: function(stepId, idx) { stepEnterTs = Date.now(); if (idx > reachedMaxIdx) reachedMaxIdx = idx; track('step_enter', { stepId: stepId, stepIndex: idx }); },
+            exitStep: function(stepId, idx, direction) { var d = stepEnterTs ? (Date.now() - stepEnterTs) : 0; track('step_exit', { stepId: stepId, stepIndex: idx, durationMs: d, direction: direction || 'forward' }); },
+            stepComplete: function(stepId, idx) { track('step_complete', { stepId: stepId, stepIndex: idx }); },
+            validationError: function(stepId, idx, fieldCount) { track('step_validation_error', { stepId: stepId, stepIndex: idx, fieldCount: fieldCount || 0 }); },
+            submitAttempt: function() { track('submit_attempt', {}); },
+            submitSuccess: function(stepsCompleted) { track('submit_success', { totalDurationMs: Date.now() - startedAt, stepsCompleted: stepsCompleted || 0 }); send(false); },
+            submitError: function() { track('submit_error', {}); send(false); },
+            abandon: function(lastStepId, lastIdx) { if (ended) return; ended = true; track('abandon', { lastStepId: lastStepId, lastStepIndex: lastIdx, reachedMaxStepIndex: reachedMaxIdx }); send(true); },
+            flush: function(useBeacon) { send(useBeacon); }
+        };
+    })();
+
     
     // Log initial config load
     log('=== Form Config Debug ===');
@@ -1708,6 +1815,24 @@ export function generateFormJS(form: Form, childId?: string): string {
             this.updateProgress();
 
             this.evaluateConditionals();
+
+            // Analytics: record the form view and the first step entry, and
+            // report abandonment when the page is hidden/closed.
+            try {
+                analytics.formView();
+                var firstStepId = (stepsConfig[this.currentStep] || {}).id || '';
+                analytics.enterStep(firstStepId, this.currentStep);
+                var self = this;
+                var onHide = function() {
+                    if (self.isSubmitting || self._submitted) return;
+                    var sid = (stepsConfig[self.currentStep] || {}).id || '';
+                    analytics.abandon(sid, self.currentStep);
+                };
+                window.addEventListener('pagehide', onHide);
+                document.addEventListener('visibilitychange', function() {
+                    if (document.visibilityState === 'hidden') { analytics.flush(true); }
+                });
+            } catch (e) { log('analytics init error', e); }
         }
         
         bindEvents() {
@@ -1736,6 +1861,8 @@ export function generateFormJS(form: Form, childId?: string): string {
             this.form.on('change input', 'input, textarea, select', function() {
                 self.collectData();
                 self.evaluateConditionals();
+                // Analytics: mark the form as started on the first interaction.
+                if (!self._analyticsStarted) { self._analyticsStarted = true; try { analytics.start(); } catch (e) {} }
                 // Debounce auto-navigation check to prevent multiple triggers
                 clearTimeout(self.autoNavTimeout);
                 self.autoNavTimeout = setTimeout(function() {
@@ -2621,6 +2748,11 @@ export function generateFormJS(form: Form, childId?: string): string {
             // Only validate if no conditional navigation matched
             if (!conditionalNavMatched && !this.validateCurrentStep()) {
                 log('Validation failed, staying on current step');
+                try {
+                    var vStep = stepsConfig[this.currentStep] || {};
+                    var vErrors = this.shadowRoot ? this.shadowRoot.querySelectorAll('.wp-form-error:not(:empty), .has-error').length : 0;
+                    analytics.validationError(vStep.id || '', this.currentStep, vErrors);
+                } catch (e) {}
                 return;
             }
             
@@ -2670,6 +2802,16 @@ export function generateFormJS(form: Form, childId?: string): string {
             clearTimeout(self.autoAdvanceTimer);
             self.autoAdvanceTimer = null;
 
+            // Analytics: record leaving the current step (with dwell time and
+            // direction) and, for forward moves, that the step was completed.
+            try {
+                var isBack = !!(options && options.isBack);
+                var direction = isBack ? 'back' : (index > self.currentStep ? 'forward' : 'jump');
+                var fromCfg = stepsConfig[self.currentStep] || {};
+                analytics.exitStep(fromCfg.id || '', self.currentStep, direction);
+                if (!isBack) { analytics.stepComplete(fromCfg.id || '', self.currentStep); }
+            } catch (e) {}
+
             // Record the step we're leaving on forward moves so the back button
             // can retrace the real path. Back moves consume the history instead.
             if (!options || !options.isBack) {
@@ -2691,6 +2833,12 @@ export function generateFormJS(form: Form, childId?: string): string {
             self.isNavigating = false;
             self.updateProgress();
             self.evaluateConditionals();
+
+            // Analytics: record entry into the new step.
+            try {
+                var toCfg = stepsConfig[self.currentStep] || {};
+                analytics.enterStep(toCfg.id || '', self.currentStep);
+            } catch (e) {}
             
             // Only scroll if the form is out of view (above viewport)
             const formTop = self.container.offset().top;
@@ -2766,12 +2914,17 @@ export function generateFormJS(form: Form, childId?: string): string {
         submitForm() {
             if (!this.validateCurrentStep()) {
                 log('Submit validation failed');
+                try {
+                    var svStep = stepsConfig[this.currentStep] || {};
+                    analytics.validationError(svStep.id || '', this.currentStep, 0);
+                } catch (e) {}
                 return;
             }
             
             this.isSubmitting = true;
             this.collectData();
             this.showLoading();
+            try { analytics.submitAttempt(); } catch (e) {}
             
             log('Submitting form', this.formData);
             log('Submission config', submissionConfig);
@@ -2850,6 +3003,8 @@ export function generateFormJS(form: Form, childId?: string): string {
                     const isSuccess = useCustomUrl ? true : (response && response.success);
                     
                     if (isSuccess) {
+                        this._submitted = true;
+                        try { analytics.submitSuccess(this.stepHistory.length + 1); } catch (e) {}
                         // Complete the progress bar on success
                         this.container.find('.wp-form-progress-fill').css('width', '100%');
                         this.container.find('.wp-form-progress-percentage').text('100%');
@@ -3000,6 +3155,7 @@ export function generateFormJS(form: Form, childId?: string): string {
                             }, 2000);
                         }
                     } else {
+                        try { analytics.submitError(); } catch (e) {}
                         const errorMsg = (response && response.data && response.data.message) 
                             ? response.data.message 
                             : 'Submission failed. Please try again.';
@@ -3008,6 +3164,7 @@ export function generateFormJS(form: Form, childId?: string): string {
                 },
                 error: (xhr, status, error) => {
                     this.hideLoading();
+                    try { analytics.submitError(); } catch (e) {}
                     log('Submit error', status, error, xhr.responseText);${pluginSettings.sentryDsn ? `
                     onError(new Error('Form submission failed: ' + status + ' ' + error));` : ''}
                     this.showError('An error occurred while submitting the form. Please check your connection and try again.');

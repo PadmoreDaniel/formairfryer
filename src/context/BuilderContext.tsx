@@ -528,7 +528,7 @@ function builderReducer(state: BuilderState, action: BuilderAction): BuilderStat
 
     case 'UPDATE_FORM_INHERITANCE': {
       const current = state.form.inheritance || {
-        theme: false, layout: false, progress: false, submission: false, plugin: false,
+        theme: false, layout: false, progress: false, submission: false, plugin: false, analytics: false,
       };
       return saveToHistory({
         ...state,

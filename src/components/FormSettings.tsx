@@ -12,6 +12,7 @@ const inheritanceSections: { key: InheritableSection; label: string; hint: strin
   { key: 'progress', label: 'Progress bar', hint: 'Progress mode, position and animation.' },
   { key: 'submission', label: 'Submission', hint: 'Thank-you behavior, redirects and destination defaults.' },
   { key: 'plugin', label: 'Plugin / export', hint: 'Plugin name, slug and shortcode.' },
+  { key: 'analytics', label: 'Analytics', hint: 'Whether tracking is enabled and the sampling rate.' },
 ];
 
 export function FormSettings() {
@@ -66,6 +67,24 @@ export function FormSettings() {
 
   const updatePluginSettings = (updates: Partial<typeof form.pluginSettings>) => {
     dispatch({ type: 'UPDATE_PLUGIN_SETTINGS', payload: updates });
+  };
+
+  // Analytics enable toggle. When the form inherits analytics from a project,
+  // the toggle edits the project defaults so all inheriting forms stay in sync.
+  const analyticsEditsProject = !!(currentProject && form.inheritance?.analytics);
+  const effectiveAnalytics = analyticsEditsProject
+    ? currentProject!.defaults.analytics
+    : form.analyticsConfig;
+  const analyticsEnabled = !!effectiveAnalytics?.enabled;
+  const setAnalyticsEnabled = (enabled: boolean) => {
+    if (analyticsEditsProject && currentProject) {
+      dispatch({
+        type: 'UPDATE_PROJECT_DEFAULTS',
+        payload: { analytics: { ...currentProject.defaults.analytics, enabled } },
+      });
+    } else {
+      updateForm({ analyticsConfig: { ...(form.analyticsConfig || { enabled: false }), enabled } });
+    }
   };
 
   return (
@@ -136,6 +155,22 @@ export function FormSettings() {
                 onChange={(e) => updateForm({ author: e.target.value })}
                 placeholder="Your name"
               />
+            </div>
+
+            <div className="form-group checkbox-group">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={analyticsEnabled}
+                  onChange={(e) => setAnalyticsEnabled(e.target.checked)}
+                />
+                <span>Enable analytics tracking</span>
+              </label>
+              <p className="field-hint">
+                Collects anonymous, privacy-safe funnel &amp; drop-off data from
+                live forms (never answer values). View it in the Analytics dashboard.
+                {analyticsEditsProject ? ' Editing the project default (inherited).' : ''}
+              </p>
             </div>
 
             <div className="form-group">

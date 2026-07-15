@@ -17,6 +17,7 @@ import {
   ProjectPluginSettings,
   LayoutDefaults,
   FormInheritance,
+  AnalyticsConfig,
   CURRENT_SCHEMA_VERSION,
 } from '../types';
 
@@ -258,6 +259,7 @@ export const createForm = (options: CreateFormOptions = {}): Form => {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     pluginSettings: project ? projectPluginToFormPlugin(project.defaults.plugin) : { ...defaultPluginSettings },
+    analyticsConfig: project ? { ...project.defaults.analytics } : { ...defaultAnalyticsConfig },
     schemaVersion: CURRENT_SCHEMA_VERSION,
   };
 
@@ -320,7 +322,14 @@ export const createDefaultInheritance = (inherit: boolean): FormInheritance => (
   progress: inherit,
   submission: inherit,
   plugin: inherit,
+  analytics: inherit,
 });
+
+// Default analytics configuration: tracking disabled until explicitly enabled.
+export const defaultAnalyticsConfig: AnalyticsConfig = {
+  enabled: false,
+  sampleRate: 1,
+};
 
 // Generate a stable, URL/shortcode-safe child id from a form name.
 export const generateChildId = (name: string): string => {
@@ -356,6 +365,7 @@ export const createProjectDefaults = (name: string = 'New Project'): ProjectDefa
   progress: { ...defaultProgressConfig },
   submission: { ...defaultSubmissionConfig },
   plugin: createProjectPluginSettings(name),
+  analytics: { ...defaultAnalyticsConfig },
 });
 
 // Create a new empty project.
@@ -380,6 +390,13 @@ export const migrateForm = (form: Form): Form => {
       // A form linked to a project defaults to inheriting; a standalone legacy
       // form keeps its own values (no inheritance) to avoid visual drift.
       migrated.inheritance = createDefaultInheritance(false);
+    } else if ((migrated.inheritance as any).analytics === undefined) {
+      // Schema v3 added the analytics section; default it to not inherited so
+      // existing forms are unaffected until the user opts in.
+      migrated.inheritance = { ...migrated.inheritance, analytics: false };
+    }
+    if (migrated.analyticsConfig === undefined) {
+      migrated.analyticsConfig = { ...defaultAnalyticsConfig };
     }
     if (migrated.projectId && !migrated.childId) {
       migrated.childId = generateChildId(migrated.name);
@@ -413,6 +430,9 @@ export const resolveEffectiveForm = (form: Form, project?: Project | null): Form
   }
   if (inh.plugin) {
     effective.pluginSettings = projectPluginToFormPlugin(d.plugin);
+  }
+  if (inh.analytics) {
+    effective.analyticsConfig = { ...d.analytics };
   }
   if (inh.layout) {
     effective.steps = form.steps.map((step) => ({
