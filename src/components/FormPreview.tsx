@@ -3,6 +3,40 @@ import { useBuilder } from '../context/BuilderContext';
 import { Question, Condition, ConditionRule } from '../types';
 import { getTrackingData } from '../utils/trackingData';
 
+// Compute the current date/time formatted for a date or datetime question,
+// matching the format the corresponding input expects (native vs input mask).
+const pad2 = (n: number): string => String(n).padStart(2, '0');
+
+function getTodayValueForQuestion(question: Question): string {
+  const now = new Date();
+  const dd = pad2(now.getDate());
+  const mm = pad2(now.getMonth() + 1);
+  const yyyy = now.getFullYear();
+  const hh = pad2(now.getHours());
+  const min = pad2(now.getMinutes());
+  if (question.type === 'date') {
+    return question.useDateInputMask ? `${dd}/${mm}/${yyyy}` : `${yyyy}-${mm}-${dd}`;
+  }
+  if (question.type === 'datetime') {
+    return question.useDateInputMask ? `${dd}/${mm}/${yyyy} ${hh}:${min}` : `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+  }
+  return '';
+}
+
+// Build the initial form data, seeding any date/datetime fields configured to
+// prefill with today's date so the preview matches the exported form.
+function buildInitialFormData(steps: { questions: Question[] }[]): Record<string, any> {
+  const data: Record<string, any> = {};
+  steps.forEach((step) => {
+    step.questions.forEach((question) => {
+      if ((question.type === 'date' || question.type === 'datetime') && question.prefillToday) {
+        data[question.fieldName || question.id] = getTodayValueForQuestion(question);
+      }
+    });
+  });
+  return data;
+}
+
 export function FormPreview() {
   const { state, dispatch, getEffectiveForm } = useBuilder();
   const { previewMode } = state;
@@ -10,7 +44,7 @@ export function FormPreview() {
   // matches exactly what the exported plugin will render.
   const form = getEffectiveForm();
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
-  const [formData, setFormData] = useState<Record<string, any>>({});
+  const [formData, setFormData] = useState<Record<string, any>>(() => buildInitialFormData(form.steps));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -136,6 +170,20 @@ export function FormPreview() {
       }
     }
   }, [formData, currentStep, currentStepIndex, isSubmitting, submitted, form.steps, isTransitioning]);
+
+  // When the preview is (re)opened, reset to the first step and reseed any
+  // date/datetime fields configured to prefill today's date.
+  useEffect(() => {
+    if (previewMode) {
+      setCurrentStepIndex(0);
+      setFormData(buildInitialFormData(form.steps));
+      setErrors({});
+      setSubmitted(false);
+      stepHistory.current = [];
+      autoNavArmed.current = false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewMode]);
 
   // Safety check - if no steps exist, don't render (must be after all hooks)
   if (!currentStep) {
@@ -700,7 +748,7 @@ export function FormPreview() {
 
   const resetPreview = () => {
     setCurrentStepIndex(0);
-    setFormData({});
+    setFormData(buildInitialFormData(form.steps));
     setErrors({});
     setSubmitted(false);
     stepHistory.current = [];
@@ -1025,6 +1073,33 @@ function QuestionField({
     border: `${theme.borders.width}px ${theme.borders.style} ${error ? theme.colors.error : theme.colors.border}`,
   };
 
+  const normalizeCurrencyValue = (rawValue: string): string => {
+    const cleaned = rawValue.replace(/,/g, '').replace(/[^\d.]/g, '');
+    if (!cleaned) return '';
+
+    const hasTrailingDot = cleaned.endsWith('.');
+    const firstDot = cleaned.indexOf('.');
+    if (firstDot === -1) return cleaned;
+
+    const integerPart = cleaned.slice(0, firstDot).replace(/\./g, '');
+    const decimalPart = cleaned.slice(firstDot + 1).replace(/\./g, '');
+    if (hasTrailingDot && decimalPart === '') {
+      return `${integerPart || '0'}.`;
+    }
+    return decimalPart ? `${integerPart || '0'}.${decimalPart}` : (integerPart || '0');
+  };
+
+  const formatCurrencyValue = (normalizedValue: string): string => {
+    if (!normalizedValue) return '';
+
+    const hasTrailingDot = normalizedValue.endsWith('.');
+    const [integerPart, decimalPart = ''] = normalizedValue.split('.');
+    const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+    if (hasTrailingDot) return `${formattedInteger}.`;
+    return decimalPart ? `${formattedInteger}.${decimalPart}` : formattedInteger;
+  };
+
   // For radio options that allow custom text ("Other"): the option's stored
   // value becomes the user's typed text. Track whether such an option is the
   // active selection so the correct radio stays checked while typing.
@@ -1068,6 +1143,10 @@ function QuestionField({
         );
       
       case 'currency':
+        const normalizedCurrencyValue = typeof value === 'string' ? value : String(value || '');
+        const displayCurrencyValue = question.currencyUseThousandsSeparator
+          ? formatCurrencyValue(normalizedCurrencyValue)
+          : normalizedCurrencyValue;
         return (
           <div className="input-with-adornment" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
             <span 
@@ -1085,9 +1164,10 @@ function QuestionField({
               €
             </span>
             <input
-              type="number"
-              value={value}
-              onChange={(e) => onChange(e.target.value)}
+              type="text"
+              inputMode="decimal"
+              value={displayCurrencyValue}
+              onChange={(e) => onChange(normalizeCurrencyValue(e.target.value))}
               onKeyDown={onKeyDown}
               placeholder={question.placeholder || '0.00'}
               min={question.validation.min}

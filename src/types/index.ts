@@ -56,12 +56,14 @@ export interface Question {
   imageUrl?: string; // Image URL to display with the question (above or below label)
   imagePosition?: 'above' | 'below'; // Position of the image relative to the label
   defaultValue?: string;
+  currencyUseThousandsSeparator?: boolean; // For currency fields: display grouping separators while typing (e.g. 150,000)
   options?: QuestionOption[]; // For radio, checkbox, select
   validation: QuestionValidation;
   privacyPolicyUrl?: string; // URL for privacy policy link (for privacy_policy type)
   privacyPolicyText?: string; // Text displayed next to the checkbox (for privacy_policy type)
   booleanValue?: boolean; // For privacy_policy type: submit as true/false instead of ["accepted"]
   useDateInputMask?: boolean; // For date fields: use text input with mask instead of date picker (better for mobile)
+  prefillToday?: boolean; // For date/datetime fields: prefill with the current date (and time)
   yearInputStyle?: 'dropdown' | 'text'; // For year fields: render a dropdown or a free-text input
   minYear?: number; // For year fields (dropdown): earliest selectable year
   maxYear?: number; // For year fields (dropdown): latest selectable year

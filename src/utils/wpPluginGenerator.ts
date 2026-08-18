@@ -233,6 +233,10 @@ export function generateThemeCSS(theme: Theme): string {
   display: flex;
   flex-direction: column;
   gap: calc(var(--wp-form-spacing-unit) / 2);
+  /* Grid items default to min-width:auto, which lets wide content (e.g. native
+     date/time inputs on iOS) push the field past its column and overflow the
+     form. Allow the field to shrink to its track. */
+  min-width: 0;
 }
 
 .wp-form-field-label {
@@ -265,6 +269,27 @@ export function generateThemeCSS(theme: Theme): string {
   outline: none;
   border-color: var(--wp-form-primary);
   box-shadow: 0 0 0 ${theme.inputs.focusRingWidth}px ${theme.inputs.focusRingColor}40;
+}
+
+/* Native date/time inputs have an intrinsic width on iOS Safari that ignores
+   width:100% and can overflow their container. Reset the appearance and allow
+   them to shrink so they stay inside the form on all devices. */
+.wp-form input[type="date"].wp-form-field-input,
+.wp-form input[type="time"].wp-form-field-input,
+.wp-form input[type="datetime-local"].wp-form-field-input {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Prevent the WebKit date/time edit fields from forcing extra width. */
+.wp-form input[type="date"].wp-form-field-input::-webkit-date-and-time-value,
+.wp-form input[type="time"].wp-form-field-input::-webkit-date-and-time-value,
+.wp-form input[type="datetime-local"].wp-form-field-input::-webkit-date-and-time-value {
+  text-align: left;
+  margin: 0;
 }
 
 .wp-form-field-textarea {
@@ -1377,9 +1402,10 @@ function generateQuestionHTML(question: Question, gridColumns: number): string {
                       placeholder="<?php echo esc_attr('${placeholder || 'DD/MM/YYYY'}'); ?>"
                       maxlength="10"
                       data-format="date"
+                      ${question.prefillToday ? 'data-prefill-today="date"' : ''}
                       ${required ? 'required' : ''}>`;
       } else {
-        inputHTML = `<input type="date" class="wp-form-field-input" name="${fieldName}" id="${questionId}" ${required ? 'required' : ''}>`;
+        inputHTML = `<input type="date" class="wp-form-field-input" name="${fieldName}" id="${questionId}" ${question.prefillToday ? 'data-prefill-today="date"' : ''} ${required ? 'required' : ''}>`;
       }
       break;
     
@@ -1396,9 +1422,10 @@ function generateQuestionHTML(question: Question, gridColumns: number): string {
                       placeholder="<?php echo esc_attr('${placeholder || 'DD/MM/YYYY HH:MM'}'); ?>"
                       maxlength="16"
                       data-format="datetime"
+                      ${question.prefillToday ? 'data-prefill-today="datetime"' : ''}
                       ${required ? 'required' : ''}>`;
       } else {
-        inputHTML = `<input type="datetime-local" class="wp-form-field-input" name="${fieldName}" id="${questionId}" ${required ? 'required' : ''}>`;
+        inputHTML = `<input type="datetime-local" class="wp-form-field-input" name="${fieldName}" id="${questionId}" ${question.prefillToday ? 'data-prefill-today="datetime"' : ''} ${required ? 'required' : ''}>`;
       }
       break;
     
@@ -1437,13 +1464,15 @@ function generateQuestionHTML(question: Question, gridColumns: number): string {
       break;
     
     case 'currency':
+      const useThousandsSeparator = !!question.currencyUseThousandsSeparator;
       inputHTML = `<div class="wp-form-input-with-adornment">
                     <span class="wp-form-input-adornment wp-form-input-adornment-start">€</span>
-                    <input type="number" 
-                      class="wp-form-field-input wp-form-currency-input" 
+                    <input type="${useThousandsSeparator ? 'text' : 'number'}" 
+                      class="wp-form-field-input wp-form-currency-input${useThousandsSeparator ? ' wp-form-currency-delimited' : ''}" 
                       name="${fieldName}" 
                       id="${questionId}"
                       placeholder="<?php echo esc_attr('${placeholder || '0.00'}'); ?>"
+                      inputmode="decimal"
                       step="0.01"
                       ${question.validation.min !== undefined ? `min="${question.validation.min}"` : ''}
                       ${question.validation.max !== undefined ? `max="${question.validation.max}"` : ''}
@@ -1810,6 +1839,7 @@ export function generateFormJS(form: Form, childId?: string): string {
         }
         
         init() {
+            this.prefillDates();
             this.collectData();
             this.bindEvents();
             this.updateProgress();
@@ -1833,6 +1863,39 @@ export function generateFormJS(form: Form, childId?: string): string {
                     if (document.visibilityState === 'hidden') { analytics.flush(true); }
                 });
             } catch (e) { log('analytics init error', e); }
+        }
+        
+        // Prefill date/datetime inputs marked with data-prefill-today using the
+        // visitor's current local date (and time). Native inputs use ISO-ish
+        // formats; masked text inputs use DD/MM/YYYY [HH:MM].
+        prefillDates() {
+            const pad = function(n) { return String(n).padStart(2, '0'); };
+            this.form.find('[data-prefill-today]').each(function() {
+                const $input = $(this);
+                if ($input.val()) return; // Respect any pre-existing value
+                const mode = $input.data('prefill-today');
+                const now = new Date();
+                const dd = pad(now.getDate());
+                const mm = pad(now.getMonth() + 1);
+                const yyyy = now.getFullYear();
+                const hh = pad(now.getHours());
+                const min = pad(now.getMinutes());
+                const isMask = $input.hasClass('wp-form-date-mask-input');
+                let value = '';
+                if (mode === 'datetime') {
+                    value = isMask
+                        ? (dd + '/' + mm + '/' + yyyy + ' ' + hh + ':' + min)
+                        : (yyyy + '-' + mm + '-' + dd + 'T' + hh + ':' + min);
+                } else {
+                    value = isMask
+                        ? (dd + '/' + mm + '/' + yyyy)
+                        : (yyyy + '-' + mm + '-' + dd);
+                }
+                $input.val(value);
+                if (isMask) {
+                    $input.data('prev-value', value);
+                }
+            });
         }
         
         bindEvents() {
@@ -1966,6 +2029,12 @@ export function generateFormJS(form: Form, childId?: string): string {
                 const formatted = self.formatNumberPlate($(this).val());
                 $(this).val(formatted);
             });
+
+            // Currency auto-formatting with optional thousands separators
+            this.form.on('input', '.wp-form-currency-delimited', function() {
+              const normalized = self.normalizeCurrencyValue($(this).val());
+              $(this).val(self.formatCurrencyWithSeparators(normalized));
+            });
             
             // Date mask input formatting
             this.form.on('input', '.wp-form-date-mask-input', function(e) {
@@ -2071,6 +2140,35 @@ export function generateFormJS(form: Form, childId?: string): string {
             
             return result;
         }
+
+          normalizeCurrencyValue(value) {
+            const cleaned = String(value || '').replace(/,/g, '').replace(/[^\\d.]/g, '');
+            if (!cleaned) return '';
+
+            const hasTrailingDot = cleaned.endsWith('.');
+            const firstDot = cleaned.indexOf('.');
+            if (firstDot === -1) return cleaned;
+
+            const integerPart = cleaned.substring(0, firstDot).replace(/\\./g, '');
+            const decimalPart = cleaned.substring(firstDot + 1).replace(/\\./g, '');
+            if (hasTrailingDot && decimalPart === '') {
+              return (integerPart || '0') + '.';
+            }
+            return decimalPart ? (integerPart || '0') + '.' + decimalPart : (integerPart || '0');
+          }
+
+          formatCurrencyWithSeparators(value) {
+            if (!value) return '';
+
+            const hasTrailingDot = value.endsWith('.');
+            const parts = value.split('.');
+            const integerPart = parts[0] || '';
+            const decimalPart = parts.length > 1 ? parts[1] : '';
+            const formattedInteger = integerPart.replace(/\\B(?=(\\d{3})+(?!\\d))/g, ',');
+
+            if (hasTrailingDot) return formattedInteger + '.';
+            return decimalPart ? formattedInteger + '.' + decimalPart : formattedInteger;
+          }
         
         // Validate Irish number plate format
         isValidNumberPlate(value) {
@@ -2156,7 +2254,11 @@ export function generateFormJS(form: Form, childId?: string): string {
                         self.formData[name] = $el.val();
                     }
                 } else {
+                  if ($el.hasClass('wp-form-currency-delimited')) {
+                    self.formData[name] = self.normalizeCurrencyValue($el.val());
+                  } else {
                     self.formData[name] = $el.val();
+                  }
                 }
             });
             
@@ -2341,14 +2443,17 @@ export function generateFormJS(form: Form, childId?: string): string {
                 }
                 
                 // Number validations
-                if ($input.attr('type') === 'number') {
-                    const numValue = parseFloat(value);
-                    if (validation.min !== undefined && numValue < validation.min) {
+                if ($input.attr('type') === 'number' || $input.hasClass('wp-form-currency-delimited')) {
+                  const numericValue = $input.hasClass('wp-form-currency-delimited')
+                    ? self.normalizeCurrencyValue(value)
+                    : value;
+                  const numValue = parseFloat(numericValue);
+                  if (!isNaN(numValue) && validation.min !== undefined && numValue < validation.min) {
                         $field.addClass('has-error');
                         $field.find('.wp-form-field-error').text('Minimum value is ' + validation.min).show();
                         isValid = false;
                     }
-                    if (validation.max !== undefined && numValue > validation.max) {
+                  if (!isNaN(numValue) && validation.max !== undefined && numValue > validation.max) {
                         $field.addClass('has-error');
                         $field.find('.wp-form-field-error').text('Maximum value is ' + validation.max).show();
                         isValid = false;

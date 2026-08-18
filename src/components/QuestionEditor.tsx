@@ -204,6 +204,40 @@ export function QuestionEditor() {
           </div>
         )}
 
+        {['date', 'datetime'].includes(selectedQuestion.type) && (
+          <div className="form-group checkbox-group">
+            <label className="toggle-label">
+              <input
+                type="checkbox"
+                checked={selectedQuestion.prefillToday || false}
+                onChange={(e) => updateQuestion({ prefillToday: e.target.checked })}
+              />
+              <span className="toggle-text">
+                Prefill with today's {selectedQuestion.type === 'datetime' ? 'date & time' : 'date'}
+              </span>
+            </label>
+            <span className="form-hint" style={{ display: 'block', marginTop: '4px' }}>
+              The field starts filled with the current {selectedQuestion.type === 'datetime' ? 'date and time' : 'date'} (the user can still change it)
+            </span>
+          </div>
+        )}
+
+        {selectedQuestion.type === 'currency' && (
+          <div className="form-group checkbox-group">
+            <label className="toggle-label">
+              <input
+                type="checkbox"
+                checked={selectedQuestion.currencyUseThousandsSeparator || false}
+                onChange={(e) => updateQuestion({ currencyUseThousandsSeparator: e.target.checked })}
+              />
+              <span className="toggle-text">Use thousands separators (e.g. 150,000)</span>
+            </label>
+            <span className="form-hint" style={{ display: 'block', marginTop: '4px' }}>
+              Formats large values with commas while typing.
+            </span>
+          </div>
+        )}
+
         {selectedQuestion.type === 'year' && (
           <>
             <div className="form-group">
