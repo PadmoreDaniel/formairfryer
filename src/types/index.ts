@@ -15,6 +15,7 @@ export type QuestionType =
   | 'date'
   | 'time'
   | 'datetime'
+  | 'year'
   | 'file'
   | 'rating'
   | 'slider'
@@ -29,6 +30,7 @@ export interface QuestionOption {
   label: string;
   value: string;
   imageUrl?: string;
+  allowCustomInput?: boolean; // For radio: selecting this option reveals a free-text input whose value is submitted
 }
 
 export interface QuestionValidation {
@@ -60,6 +62,10 @@ export interface Question {
   privacyPolicyText?: string; // Text displayed next to the checkbox (for privacy_policy type)
   booleanValue?: boolean; // For privacy_policy type: submit as true/false instead of ["accepted"]
   useDateInputMask?: boolean; // For date fields: use text input with mask instead of date picker (better for mobile)
+  yearInputStyle?: 'dropdown' | 'text'; // For year fields: render a dropdown or a free-text input
+  minYear?: number; // For year fields (dropdown): earliest selectable year
+  maxYear?: number; // For year fields (dropdown): latest selectable year
+  maxYearCurrent?: boolean; // For year fields (dropdown): use the current year as the maximum (resolved dynamically)
   textAlignment?: 'left' | 'center' | 'right'; // For helper_text type: text alignment
   helperContent?: string; // For helper_text type: the display text content
   // Grid positioning
@@ -78,6 +84,8 @@ export type ConditionOperator =
   | 'not_contains'
   | 'greater_than'
   | 'less_than'
+  | 'age_greater_than'
+  | 'age_less_than'
   | 'is_empty'
   | 'is_not_empty'
   | 'starts_with'
@@ -112,9 +120,12 @@ export interface ConditionalNavigation {
   priority: number; // Higher priority rules are evaluated first
 }
 
+export type ButtonStyle = 'contained' | 'outlined' | 'text';
+
 export interface ButtonConfig {
   enabled: boolean;
   label: string;
+  style?: ButtonStyle;
   showIf?: Condition; // Condition to show the button
   enableIf?: Condition; // Condition to enable the button (if shown but might be disabled)
   customClass?: string;
@@ -160,6 +171,7 @@ export interface Step {
   scrollOnError?: boolean; // Scroll to first error on validation failure (default: true)
   // Auto-advance for single question steps
   autoAdvance?: boolean; // Automatically navigate to next step when question is answered
+  autoAdvanceExcludeValues?: string[]; // Option values that should not auto-advance on single-question radio/select steps
   enterKeyAdvance?: boolean; // Allow Enter key to advance to next step in single question steps
 }
 
@@ -275,6 +287,7 @@ export interface CustomField {
 export interface SubmissionConfig {
   method: 'POST' | 'GET';
   url: string;
+  appendWPCidParamsToSubmissionUrl?: boolean; // Exported WP runtime: append stored CID/UTM params to custom submission URL
   headers: Record<string, string>;
   includeFields: 'all' | string[]; // 'all' or specific question IDs
   transformData?: string; // JavaScript function to transform data before sending
@@ -291,6 +304,34 @@ export interface SubmissionConfig {
   successTextColor?: string; // Text color for success message
   // Data Layer tracking
   dataLayerEventName?: string; // Optional: Google Tag Manager data layer event name to fire on submission
+  // Conditional post-submission redirects
+  postSubmissionRules?: PostSubmissionRedirectRule[];
+}
+
+// ==================== Post-Submission Redirect Rules ====================
+export interface ApiResponseRedirectMapping {
+  value: string; // Response value to match (e.g. "Declined")
+  url: string; // Redirect URL for this value
+}
+
+export interface PostSubmissionRedirectTarget {
+  type: 'url' | 'api';
+  url: string; // Direct redirect URL (for 'url' type) or API endpoint (for 'api' type)
+  apiConfig?: {
+    method: 'GET' | 'POST';
+    headers?: Record<string, string>;
+    bodyTemplate?: string; // JSON template with {{fieldName}} placeholders
+    redirectField: string; // JSON path to extract value from response (e.g. "risk")
+    responseRedirectMap?: ApiResponseRedirectMapping[]; // Map response values to redirect URLs
+    defaultRedirectUrl?: string; // Fallback URL if no mapping matches
+  };
+}
+
+export interface PostSubmissionRedirectRule {
+  id: string;
+  priority: number;
+  condition: Condition;
+  target: PostSubmissionRedirectTarget;
 }
 
 // ==================== Form ====================
@@ -309,6 +350,98 @@ export interface Form {
   author?: string;
   // Plugin settings
   pluginSettings: PluginSettings;
+  // ==================== Project linkage (v2) ====================
+  // Current schema version for migration handling.
+  schemaVersion?: number;
+  // Owning project id (undefined for legacy standalone forms).
+  projectId?: string;
+  // Stable identifier used by the project shortcode: [project_shortcode id="childId"].
+  childId?: string;
+  // Per-section inheritance flags. When true, the section is taken from the
+  // owning project's defaults; when false, the form's own values are used.
+  inheritance?: FormInheritance;
+  // Optional analytics tracking configuration for live (exported) forms.
+  analyticsConfig?: AnalyticsConfig;
+}
+
+// ==================== Project & Inheritance (v2) ====================
+// Current schema version for forms and projects. Bump when the persisted
+// shape changes so migration transforms can upgrade older records.
+export const CURRENT_SCHEMA_VERSION = 3;
+
+// Sections of a form that can be inherited from a project.
+export type InheritableSection =
+  | 'theme'
+  | 'layout'
+  | 'progress'
+  | 'submission'
+  | 'plugin'
+  | 'analytics';
+
+// Per-section inherit vs override toggles for a child form.
+export interface FormInheritance {
+  theme: boolean;
+  layout: boolean;
+  progress: boolean;
+  submission: boolean;
+  plugin: boolean;
+  analytics: boolean;
+}
+
+// Privacy-safe analytics configuration. Endpoint and write key are supplied at
+// export time from build environment variables; this only stores whether
+// tracking is enabled and an optional client-side sampling rate (0..1).
+export interface AnalyticsConfig {
+  enabled: boolean;
+  sampleRate?: number;
+}
+
+// Layout defaults applied to new steps and inherited by child forms.
+export interface LayoutDefaults {
+  gridColumns: number;
+  gridGap: number;
+  minHeight?: number;
+  contentAlignment: ContentAlignment;
+}
+
+// Project-level plugin/export settings. The shortcode here is the plugin's
+// shortcode tag; individual child forms are addressed via the id attribute.
+export interface ProjectPluginSettings {
+  pluginName: string;
+  pluginSlug: string;
+  pluginVersion: string;
+  pluginAuthor: string;
+  pluginDescription: string;
+  shortcode: string;
+  menuLocation: 'settings' | 'tools' | 'toplevel';
+  menuIcon?: string;
+  sentryDsn?: string;
+  showSkeleton?: boolean;
+}
+
+// Shared defaults that child forms inherit unless they override a section.
+export interface ProjectDefaults {
+  theme: Theme;
+  layout: LayoutDefaults;
+  progress: ProgressConfig;
+  submission: SubmissionConfig;
+  plugin: ProjectPluginSettings;
+  analytics: AnalyticsConfig;
+}
+
+// A Project houses multiple child forms and owns shared design/behavior
+// defaults, and is the unit of WordPress plugin export.
+export interface Project {
+  id: string;
+  name: string;
+  description?: string;
+  schemaVersion: number;
+  defaults: ProjectDefaults;
+  // Ordered list of child form ids belonging to this project.
+  formIds: string[];
+  createdAt: string;
+  updatedAt: string;
+  author?: string;
 }
 
 export interface PluginSettings {
@@ -321,11 +454,15 @@ export interface PluginSettings {
   menuLocation: 'settings' | 'tools' | 'toplevel';
   menuIcon?: string;
   sentryDsn?: string;
+  showSkeleton?: boolean;
 }
 
 // ==================== Builder State ====================
 export interface BuilderState {
   form: Form;
+  // Owning project of the current form, if any. Holds shared defaults that
+  // inherited sections resolve against.
+  currentProject: Project | null;
   selectedStepId: string | null;
   selectedQuestionId: string | null;
   previewMode: boolean;
@@ -339,6 +476,15 @@ export interface FormExport {
   version: string;
   exportedAt: string;
   form: Form;
+}
+
+// Project JSON export bundles the project and all of its child forms so the
+// package is fully self-contained and can be re-imported later.
+export interface ProjectExport {
+  version: string;
+  exportedAt: string;
+  project: Project;
+  forms: Form[];
 }
 
 // ==================== Utility Types ====================

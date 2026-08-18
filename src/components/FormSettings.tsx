@@ -1,14 +1,65 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useBuilder } from '../context/BuilderContext';
+import { useAuth } from '../context/AuthContext';
+import { getUserProjects, SavedProject } from '../services/formService';
+import { createDefaultInheritance, generateChildId } from '../utils/defaults';
+import { PostSubmissionRulesEditor } from './PostSubmissionRulesEditor';
+import { InheritableSection } from '../types';
+
+const inheritanceSections: { key: InheritableSection; label: string; hint: string }[] = [
+  { key: 'theme', label: 'Theme', hint: 'Colors, typography, spacing, borders, buttons and inputs.' },
+  { key: 'layout', label: 'Step layout', hint: 'Grid columns, gaps, min height and content alignment.' },
+  { key: 'progress', label: 'Progress bar', hint: 'Progress mode, position and animation.' },
+  { key: 'submission', label: 'Submission', hint: 'Thank-you behavior, redirects and destination defaults.' },
+  { key: 'plugin', label: 'Plugin / export', hint: 'Plugin name, slug and shortcode.' },
+  { key: 'analytics', label: 'Analytics', hint: 'Whether tracking is enabled and the sampling rate.' },
+];
 
 export function FormSettings() {
   const { state, dispatch } = useBuilder();
+  const { user } = useAuth();
   const { form } = state;
+  const currentProject = state.currentProject;
   const [activeTab, setActiveTab] = useState<'general' | 'submission' | 'plugin'>('general');
+  const [projects, setProjects] = useState<SavedProject[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    if (!user) {
+      setProjects([]);
+      return;
+    }
+    getUserProjects(user.uid)
+      .then((list) => { if (active) setProjects(list); })
+      .catch(() => { if (active) setProjects([]); });
+    return () => { active = false; };
+  }, [user]);
 
   const updateForm = (updates: Partial<typeof form>) => {
     dispatch({ type: 'UPDATE_FORM', payload: updates });
   };
+
+  // Assign the current form to a project (or detach it). Existing forms keep
+  // their own look by default (no inherited sections) so linking never causes
+  // a surprise visual change; the user can opt in per section afterwards.
+  const handleAssignProject = useCallback((projectId: string) => {
+    if (!projectId) {
+      dispatch({ type: 'SET_PROJECT', payload: null });
+      dispatch({ type: 'UPDATE_FORM', payload: { projectId: undefined } });
+      return;
+    }
+    const saved = projects.find((p) => p.id === projectId);
+    if (!saved) return;
+    dispatch({ type: 'SET_PROJECT', payload: saved.project });
+    dispatch({
+      type: 'UPDATE_FORM',
+      payload: {
+        projectId: saved.project.id,
+        childId: form.childId || generateChildId(form.name),
+        inheritance: form.inheritance || createDefaultInheritance(false),
+      },
+    });
+  }, [projects, dispatch, form.childId, form.name, form.inheritance]);
 
   const updateSubmissionConfig = (updates: Partial<typeof form.submissionConfig>) => {
     dispatch({ type: 'UPDATE_SUBMISSION_CONFIG', payload: updates });
@@ -16,6 +67,24 @@ export function FormSettings() {
 
   const updatePluginSettings = (updates: Partial<typeof form.pluginSettings>) => {
     dispatch({ type: 'UPDATE_PLUGIN_SETTINGS', payload: updates });
+  };
+
+  // Analytics enable toggle. When the form inherits analytics from a project,
+  // the toggle edits the project defaults so all inheriting forms stay in sync.
+  const analyticsEditsProject = !!(currentProject && form.inheritance?.analytics);
+  const effectiveAnalytics = analyticsEditsProject
+    ? currentProject!.defaults.analytics
+    : form.analyticsConfig;
+  const analyticsEnabled = !!effectiveAnalytics?.enabled;
+  const setAnalyticsEnabled = (enabled: boolean) => {
+    if (analyticsEditsProject && currentProject) {
+      dispatch({
+        type: 'UPDATE_PROJECT_DEFAULTS',
+        payload: { analytics: { ...currentProject.defaults.analytics, enabled } },
+      });
+    } else {
+      updateForm({ analyticsConfig: { ...(form.analyticsConfig || { enabled: false }), enabled } });
+    }
   };
 
   return (
@@ -87,6 +156,85 @@ export function FormSettings() {
                 placeholder="Your name"
               />
             </div>
+
+            <div className="form-group checkbox-group">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={analyticsEnabled}
+                  onChange={(e) => setAnalyticsEnabled(e.target.checked)}
+                />
+                <span>Enable analytics tracking</span>
+              </label>
+              <p className="field-hint">
+                Collects anonymous, privacy-safe funnel &amp; drop-off data from
+                live forms (never answer values). View it in the Analytics dashboard.
+                {analyticsEditsProject ? ' Editing the project default (inherited).' : ''}
+              </p>
+            </div>
+
+            <div className="form-group">
+              <label>Project</label>
+              <select
+                value={form.projectId || ''}
+                onChange={(e) => handleAssignProject(e.target.value)}
+              >
+                <option value="">No project (standalone)</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.project.name}
+                  </option>
+                ))}
+              </select>
+              <p className="field-hint">
+                Link this form to a project to share its design system and export
+                every project form as a single plugin.
+              </p>
+            </div>
+
+            {currentProject && (
+              <div className="project-inheritance">
+                <div className="form-group">
+                  <label>Form ID (shortcode)</label>
+                  <input
+                    type="text"
+                    value={form.childId || ''}
+                    onChange={(e) =>
+                      updateForm({
+                        childId: e.target.value
+                          .toLowerCase()
+                          .replace(/[^a-z0-9]+/g, '_')
+                          .replace(/(^_|_$)/g, ''),
+                      })
+                    }
+                    placeholder="contact_form"
+                  />
+                  <p className="field-hint">
+                    Embed with <code>[{currentProject.defaults.plugin.shortcode} id="{form.childId || 'form_id'}"]</code>
+                  </p>
+                </div>
+
+                <label className="inheritance-title">Inherit from project</label>
+                {inheritanceSections.map((section) => (
+                  <div className="form-group checkbox-group" key={section.key}>
+                    <label className="checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={!!form.inheritance?.[section.key]}
+                        onChange={(e) =>
+                          dispatch({
+                            type: 'UPDATE_FORM_INHERITANCE',
+                            payload: { [section.key]: e.target.checked },
+                          })
+                        }
+                      />
+                      <span>{section.label}</span>
+                    </label>
+                    <p className="field-hint">{section.hint}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -111,6 +259,23 @@ export function FormSettings() {
                 onChange={(e) => updateSubmissionConfig({ url: e.target.value })}
                 placeholder="https://api.example.com/submit"
               />
+            </div>
+
+            <div className="form-group checkbox-group">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={form.submissionConfig.appendWPCidParamsToSubmissionUrl ?? true}
+                  onChange={(e) =>
+                    updateSubmissionConfig({ appendWPCidParamsToSubmissionUrl: e.target.checked })
+                  }
+                />
+                <span>Append WP CID Tracking parameters to custom submission URL</span>
+              </label>
+              <p className="hint">
+                Exported WordPress forms only. When enabled, query params from window.WPCidTracking are appended to the
+                configured submission URL if missing.
+              </p>
             </div>
 
             <div className="form-group">
@@ -311,6 +476,8 @@ export function FormSettings() {
                 />
               </div>
             </div>
+
+            <PostSubmissionRulesEditor />
           </div>
         )}
 
@@ -420,6 +587,20 @@ export function FormSettings() {
                 placeholder="https://examplePublicKey@o0.ingest.sentry.io/0"
               />
               <span className="hint">Provide a Sentry DSN to enable error monitoring. Critical errors during form rendering and submission will be reported to Sentry.</span>
+            </div>
+
+            <h4 style={{ marginTop: '24px', marginBottom: '12px', borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>Loading</h4>
+
+            <div className="form-group">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={form.pluginSettings.showSkeleton || false}
+                  onChange={(e) => updatePluginSettings({ showSkeleton: e.target.checked })}
+                />
+                Show skeleton loader on page load
+              </label>
+              <span className="hint">Displays a placeholder skeleton that mirrors Step 1 while the form JavaScript loads. Prevents layout shift.</span>
             </div>
           </div>
         )}

@@ -1,18 +1,45 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useBuilder } from '../context/BuilderContext';
 import { Question, Condition, ConditionRule } from '../types';
+import { getTrackingData } from '../utils/trackingData';
 
 export function FormPreview() {
-  const { state, dispatch } = useBuilder();
-  const { form, previewMode } = state;
+  const { state, dispatch, getEffectiveForm } = useBuilder();
+  const { previewMode } = state;
+  // Render the form with inherited project sections resolved so the preview
+  // matches exactly what the exported plugin will render.
+  const form = getEffectiveForm();
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [isTransitioning] = useState(false);
   const isNavigating = useRef(false);
   const pendingStepIndex = useRef<number | null>(null);
+  // Stack of step indices actually visited, used so the back button returns
+  // along the real path taken (e.g. after a conditional jump) rather than
+  // simply going to currentStepIndex - 1.
+  const stepHistory = useRef<number[]>([]);
+  // Auto-navigation only fires in response to a genuine user answer change,
+  // never merely because we landed on a step whose condition already matches
+  // (which previously trapped users when navigating back).
+  const autoNavArmed = useRef(false);
+  // Monotonic navigation token. Every step change increments it. A pending
+  // auto-advance/conditional-navigation timer captures the token when it is
+  // scheduled and aborts if the token has since changed (e.g. the user pressed
+  // Back before the timer fired), which previously caused Back to jump forward.
+  const navToken = useRef(0);
+  const autoAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cancel any pending auto-advance/conditional-navigation timer.
+  const cancelPendingAutoNav = () => {
+    if (autoAdvanceTimer.current) {
+      clearTimeout(autoAdvanceTimer.current);
+      autoAdvanceTimer.current = null;
+    }
+    navToken.current += 1;
+  };
 
   const currentStep = form.steps[currentStepIndex] || form.steps[0];
   const isFirstStep = currentStepIndex === 0;
@@ -50,26 +77,31 @@ export function FormPreview() {
     }
   }, [currentStep, currentStepIndex, form, formData]);
 
-  // Smooth step transition function
-  const transitionToStep = (newIndex: number) => {
+  // Step transition function
+  const transitionToStep = (newIndex: number, options?: { isBack?: boolean }) => {
     if (isTransitioning) return;
-    setIsTransitioning(true);
-    pendingStepIndex.current = newIndex;
-    // Wait for fade out, then change step
-    setTimeout(() => {
-      setCurrentStepIndex(newIndex);
-      pendingStepIndex.current = null;
-      // Allow fade in to complete before enabling interactions
-      setTimeout(() => {
-        setIsTransitioning(false);
-        isNavigating.current = false;
-      }, 150);
-    }, 150);
+    // Any transition invalidates a pending auto-advance timer so a stale timer
+    // cannot fire after the user has already navigated (e.g. pressed Back).
+    cancelPendingAutoNav();
+    // Record the step we're leaving on forward moves so the back button can
+    // retrace the actual path. Back moves consume the history instead.
+    if (!options?.isBack) {
+      stepHistory.current.push(currentStepIndex);
+    }
+    setCurrentStepIndex(newIndex);
+    pendingStepIndex.current = null;
+    isNavigating.current = false;
+    // Any transition disarms auto-navigation until the user changes an answer.
+    autoNavArmed.current = false;
   };
 
   // Auto-navigate when conditional navigation is triggered by form data changes
   useEffect(() => {
     if (!currentStep || isSubmitting || submitted || isNavigating.current || isTransitioning) return;
+    // Only auto-navigate as a direct result of the user changing an answer.
+    // This prevents re-triggering when the user navigates back to a step whose
+    // condition is already satisfied by their previous answer.
+    if (!autoNavArmed.current) return;
 
     // Check if any conditional navigation rule is triggered
     const sortedNavigation = [...currentStep.conditionalNavigation].sort(
@@ -78,9 +110,16 @@ export function FormPreview() {
 
     for (const nav of sortedNavigation) {
       if (evaluateCondition(nav.condition)) {
+        autoNavArmed.current = false;
         isNavigating.current = true;
+        // Capture the current navigation token; abort if it changes (e.g. the
+        // user pressed Back) before this delayed navigation runs.
+        const myToken = navToken.current;
+        if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
         // Small delay to allow UI to update before navigation
-        setTimeout(async () => {
+        autoAdvanceTimer.current = setTimeout(async () => {
+          autoAdvanceTimer.current = null;
+          if (myToken !== navToken.current) return;
           if (nav.target.type === 'submit') {
             await handleSubmit();
           } else if (nav.target.type === 'specific' && nav.target.stepId) {
@@ -124,34 +163,48 @@ export function FormPreview() {
   };
 
   const evaluateRule = (rule: ConditionRule): boolean => {
-    const value = formData[rule.questionId] || '';
+    // Resolve questionId to the actual field key used in formData
+    let fieldKey = rule.questionId;
+    for (const step of form.steps) {
+      const q = step.questions.find((q) => q.id === rule.questionId);
+      if (q) {
+        fieldKey = q.fieldName || q.id;
+        break;
+      }
+    }
+    
+    const value = formData[fieldKey] || '';
     const compareValue = rule.value;
 
     // Handle array values (from checkbox fields)
     const isArray = Array.isArray(value);
+    // Case-insensitive comparison so option values (e.g. "NO") match rule
+    // values (e.g. "no") regardless of casing.
+    const cv = String(compareValue ?? '').toLowerCase();
+    const sv = String(value ?? '').toLowerCase();
     
     switch (rule.operator) {
       case 'equals':
         // For arrays (checkboxes), check if the array contains the value
         if (isArray) {
-          return value.includes(compareValue);
+          return value.some((v: string) => String(v).toLowerCase() === cv);
         }
-        return value === compareValue;
+        return sv === cv;
       case 'not_equals':
         if (isArray) {
-          return !value.includes(compareValue);
+          return !value.some((v: string) => String(v).toLowerCase() === cv);
         }
-        return value !== compareValue;
+        return sv !== cv;
       case 'contains':
         if (isArray) {
-          return value.some((v: string) => String(v).includes(compareValue));
+          return value.some((v: string) => String(v).toLowerCase().includes(cv));
         }
-        return String(value).includes(compareValue);
+        return sv.includes(cv);
       case 'not_contains':
         if (isArray) {
-          return !value.some((v: string) => String(v).includes(compareValue));
+          return !value.some((v: string) => String(v).toLowerCase().includes(cv));
         }
-        return !String(value).includes(compareValue);
+        return !sv.includes(cv);
       case 'is_empty':
         if (isArray) {
           return value.length === 0;
@@ -166,16 +219,40 @@ export function FormPreview() {
         return Number(value) > Number(compareValue);
       case 'less_than':
         return Number(value) < Number(compareValue);
+      case 'age_greater_than':
+      case 'age_less_than': {
+        // Calculate age from a date value (supports YYYY-MM-DD, DD/MM/YYYY)
+        let dob: Date | null = null;
+        const dateStr = String(value);
+        if (dateStr.includes('/')) {
+          const parts = dateStr.split('/');
+          if (parts.length === 3) {
+            dob = new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0]));
+          }
+        } else {
+          dob = new Date(dateStr);
+        }
+        if (!dob || isNaN(dob.getTime())) return false;
+        const today = new Date();
+        let age = today.getFullYear() - dob.getFullYear();
+        const m = today.getMonth() - dob.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) {
+          age--;
+        }
+        return rule.operator === 'age_greater_than'
+          ? age > Number(compareValue)
+          : age < Number(compareValue);
+      }
       case 'starts_with':
         if (isArray) {
-          return value.some((v: string) => String(v).startsWith(compareValue));
+          return value.some((v: string) => String(v).toLowerCase().startsWith(cv));
         }
-        return String(value).startsWith(compareValue);
+        return sv.startsWith(cv);
       case 'ends_with':
         if (isArray) {
-          return value.some((v: string) => String(v).endsWith(compareValue));
+          return value.some((v: string) => String(v).toLowerCase().endsWith(cv));
         }
-        return String(value).endsWith(compareValue);
+        return sv.endsWith(cv);
       default:
         return true;
     }
@@ -239,6 +316,20 @@ export function FormPreview() {
           const numberPlateRegex = /^\d{2,3}-[A-Z]{1,2}-\d{1,6}$/;
           if (!numberPlateRegex.test(plateVal)) {
             newErrors[key] = 'Please enter a valid number plate (e.g. 191-D-12345)';
+          }
+        }
+        
+        // Year validation
+        if (question.type === 'year') {
+          const maxYear = question.maxYearCurrent
+            ? new Date().getFullYear()
+            : (question.maxYear ?? new Date().getFullYear());
+          const minYear = question.minYear ?? 1900;
+          const yr = Number(value);
+          if (!/^\d{4}$/.test(String(value)) || isNaN(yr)) {
+            newErrors[key] = 'Please enter a valid 4-digit year';
+          } else if (yr < minYear || yr > maxYear) {
+            newErrors[key] = `Please enter a year between ${minYear} and ${maxYear}`;
           }
         }
         
@@ -379,15 +470,24 @@ export function FormPreview() {
 
   const handleBack = () => {
     if (isTransitioning) return;
+    // Immediately cancel any pending auto-advance so a stale timer cannot fire
+    // and push the user forward after they chose to go back.
+    cancelPendingAutoNav();
     isNavigating.current = true;
+    // Always consume one history entry so Back stays balanced with the forward
+    // pushes, even when an explicit defaultPrevStep is used. Otherwise the
+    // history desyncs and a later history-based Back can pop a forward index.
+    const historyTop = stepHistory.current.length > 0 ? stepHistory.current.pop()! : undefined;
+    let targetIndex = -1;
+    // An explicitly configured previous step takes priority for the target.
     if (currentStep.defaultPrevStep) {
-      const targetIndex = form.steps.findIndex((s) => s.id === currentStep.defaultPrevStep);
-      if (targetIndex !== -1) {
-        transitionToStep(targetIndex);
-        return;
-      }
+      const idx = form.steps.findIndex((s) => s.id === currentStep.defaultPrevStep);
+      if (idx !== -1) targetIndex = idx;
     }
-    transitionToStep(Math.max(0, currentStepIndex - 1));
+    // Otherwise retrace the actual navigation path.
+    if (targetIndex === -1 && historyTop !== undefined) targetIndex = historyTop;
+    if (targetIndex === -1) targetIndex = Math.max(0, currentStepIndex - 1);
+    transitionToStep(targetIndex, { isBack: true });
   };
 
   const handleSubmit = async () => {
@@ -411,6 +511,16 @@ export function FormPreview() {
         }
       });
     });
+
+    // Attach page-history tracking values (wp-react-page-history-tracking).
+    // Only set when not already provided by a form field of the same name.
+    const trackingData = getTrackingData();
+    if (submissionData.referrer === undefined) {
+      submissionData.referrer = trackingData.referrer;
+    }
+    if (submissionData.lastInternalPage === undefined) {
+      submissionData.lastInternalPage = trackingData.lastInternalPage;
+    }
     
     console.log('[Preview] Form submission data:', submissionData);
     
@@ -431,6 +541,88 @@ export function FormPreview() {
       }
     }
     
+    // Evaluate post-submission redirect rules (priority order, first match wins)
+    const postRules = form.submissionConfig.postSubmissionRules || [];
+    if (postRules.length > 0) {
+      const sortedRules = [...postRules].sort((a, b) => b.priority - a.priority);
+      for (const rule of sortedRules) {
+        if (rule.condition.rules.length === 0 || evaluateCondition(rule.condition)) {
+          if (rule.target.type === 'url' && rule.target.url) {
+            console.log('[Preview] Post-submission rule matched, redirecting to:', rule.target.url);
+            if (form.submissionConfig.skipThankYouPage) {
+              window.location.href = rule.target.url;
+              return;
+            }
+            // Show success then redirect
+            setSubmitted(true);
+            setIsSubmitting(false);
+            setTimeout(() => { window.location.href = rule.target.url; }, 2000);
+            return;
+          } else if (rule.target.type === 'api' && rule.target.url) {
+            console.log('[Preview] Post-submission API rule matched, calling:', rule.target.url);
+            try {
+              // Build request body with variable interpolation
+              let body: string | undefined;
+              if (rule.target.apiConfig?.method !== 'GET' && rule.target.apiConfig?.bodyTemplate) {
+                body = rule.target.apiConfig.bodyTemplate.replace(
+                  /\{\{(\w+)\}\}/g,
+                  (_, field) => submissionData[field] ?? ''
+                );
+              }
+              const response = await fetch(rule.target.url, {
+                method: rule.target.apiConfig?.method || 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(rule.target.apiConfig?.headers || {}),
+                },
+                ...(body ? { body } : {}),
+              });
+              const data = await response.json();
+              // Extract value from response using dot-notation path
+              const responseValue = rule.target.apiConfig?.redirectField
+                ?.split('.')
+                .reduce((obj: any, key: string) => obj?.[key], data);
+              
+              if (responseValue) {
+                // Check if there's a response-to-URL mapping
+                const mappings = rule.target.apiConfig?.responseRedirectMap || [];
+                const matchedMapping = mappings.find(
+                  (m) => m.value === String(responseValue)
+                );
+                
+                let finalRedirectUrl: string | undefined;
+                if (matchedMapping) {
+                  finalRedirectUrl = matchedMapping.url;
+                  console.log('[Preview] API response mapped:', responseValue, '→', finalRedirectUrl);
+                } else if (String(responseValue).startsWith('http')) {
+                  // If the response value itself is a URL, use it directly
+                  finalRedirectUrl = String(responseValue);
+                  console.log('[Preview] API returned direct redirect URL:', finalRedirectUrl);
+                } else {
+                  // No mapping matched, use default
+                  finalRedirectUrl = rule.target.apiConfig?.defaultRedirectUrl;
+                  console.log('[Preview] No mapping matched for:', responseValue, '- using default:', finalRedirectUrl);
+                }
+                
+                if (finalRedirectUrl) {
+                  if (form.submissionConfig.skipThankYouPage) {
+                    window.location.href = finalRedirectUrl;
+                    return;
+                  }
+                  setSubmitted(true);
+                  setIsSubmitting(false);
+                  setTimeout(() => { window.location.href = finalRedirectUrl!; }, 2000);
+                  return;
+                }
+              }
+            } catch (err) {
+              console.error('[Preview] Post-submission API call failed:', err);
+            }
+          }
+        }
+      }
+    }
+    
     // Check if we should skip thank you page and redirect immediately
     if (form.submissionConfig.skipThankYouPage && form.submissionConfig.redirectOnSuccess) {
       window.location.href = form.submissionConfig.redirectOnSuccess;
@@ -443,6 +635,9 @@ export function FormPreview() {
 
   const handleInputChange = (question: Question, value: any) => {
     const key = question.fieldName || question.id;
+    // Arm auto-navigation: a user-driven answer change may now trigger a
+    // conditional navigation rule (see the auto-navigate effect).
+    autoNavArmed.current = true;
     setFormData((prev) => ({ ...prev, [key]: value }));
     if (errors[key]) {
       setErrors((prev) => {
@@ -454,14 +649,33 @@ export function FormPreview() {
     
     // Auto-advance for single question steps when enabled
     if (currentStep.autoAdvance && currentStep.questions.length === 1) {
+      const excludedValues = currentStep.autoAdvanceExcludeValues || [];
+      const shouldExcludeByValue = typeof value === 'string' && excludedValues.includes(value);
+      const hasCustomInputRadioOption =
+        question.type === 'radio' && (question.options || []).some((option) => option.allowCustomInput);
+      const fixedRadioValues = new Set(
+        (question.options || []).filter((option) => !option.allowCustomInput).map((option) => option.value)
+      );
+      const isCustomInputRadio =
+        hasCustomInputRadioOption && typeof value === 'string' && !fixedRadioValues.has(value);
+
       // Check if the question has a valid value
       const hasValidValue = value !== '' && value !== null && value !== undefined && 
         !(Array.isArray(value) && value.length === 0);
       
-      if (hasValidValue && !isNavigating.current && !isTransitioning) {
+      if (hasValidValue && !shouldExcludeByValue && !isCustomInputRadio && !isNavigating.current && !isTransitioning) {
         isNavigating.current = true;
+        // Capture the navigation token; abort if the user navigates (e.g.
+        // presses Back) before this delayed auto-advance fires.
+        const myToken = navToken.current;
+        if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current);
         // Small delay to show the selection before advancing
-        setTimeout(() => {
+        autoAdvanceTimer.current = setTimeout(() => {
+          autoAdvanceTimer.current = null;
+          if (myToken !== navToken.current) {
+            isNavigating.current = false;
+            return;
+          }
           const nextIndex = getNextStepIndex();
           if (nextIndex === -1 || nextIndex >= form.steps.length) {
             handleSubmit();
@@ -489,6 +703,8 @@ export function FormPreview() {
     setFormData({});
     setErrors({});
     setSubmitted(false);
+    stepHistory.current = [];
+    autoNavArmed.current = false;
   };
 
   const closePreview = () => {
@@ -575,7 +791,9 @@ export function FormPreview() {
               overflow: 'hidden',
               border: `${theme.borders.width}px ${theme.borders.style} ${theme.colors.border}`,
               position: 'relative',
-              ...(currentStep.minHeight ? { minHeight: currentStep.minHeight, display: 'flex', flexDirection: 'column' as const } : {}),
+              display: 'flex',
+              flexDirection: 'column' as const,
+              ...(currentStep.minHeight ? { minHeight: currentStep.minHeight } : {}),
               ...(currentStep.backgroundImage?.url ? {
                 backgroundImage: `url(${currentStep.backgroundImage.url})`,
                 backgroundSize: currentStep.backgroundImage.size || 'cover',
@@ -633,12 +851,9 @@ export function FormPreview() {
 
                 {/* Step Content */}
                 <div
-                  key={currentStep.id}
                   className="preview-step"
                   style={{ 
                     flex: 1,
-                    opacity: isTransitioning ? 0 : 1,
-                    transition: 'opacity 150ms ease-out',
                   }}
                 >
                   <div style={{ position: 'relative', zIndex: 1 }}>
@@ -653,9 +868,9 @@ export function FormPreview() {
                     {currentStep.title}
                   </h2>
                   {currentStep.description && (
-                    <p className="step-description" style={{ color: theme.colors.textMuted, textAlign: (currentStep.contentAlignment as any) || 'left' }}>
-                      {currentStep.description}
-                    </p>
+                    <p className="step-description" style={{ color: theme.colors.textMuted, textAlign: (currentStep.contentAlignment as any) || 'left' }}
+                      dangerouslySetInnerHTML={{ __html: currentStep.description.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>') }}
+                    />
                   )}
 
                   <div
@@ -710,6 +925,20 @@ export function FormPreview() {
                         fontSize: theme.buttons.fontSize,
                         fontWeight: theme.buttons.fontWeight,
                         textTransform: theme.buttons.textTransform,
+                        ...(currentStep.backButton.style === 'contained' ? {
+                          backgroundColor: theme.colors.primary,
+                          color: '#ffffff',
+                          border: 'none',
+                        } : currentStep.backButton.style === 'outlined' ? {
+                          backgroundColor: 'transparent',
+                          color: theme.colors.primary,
+                          border: `${theme.borders.width}px ${theme.borders.style} ${theme.colors.primary}`,
+                        } : {
+                          backgroundColor: 'transparent',
+                          color: theme.colors.text,
+                          border: 'none',
+                          opacity: 0.7,
+                        }),
                       }}
                     >
                       {currentStep.backButton.label}
@@ -729,11 +958,23 @@ export function FormPreview() {
                         fontSize: theme.buttons.fontSize,
                         fontWeight: theme.buttons.fontWeight,
                         textTransform: theme.buttons.textTransform,
-                        backgroundColor: theme.colors.primary,
-                        color: 'white',
+                        ...(currentStep.continueButton.style === 'outlined' ? {
+                          backgroundColor: 'transparent',
+                          color: theme.colors.primary,
+                          border: `${theme.borders.width}px ${theme.borders.style} ${theme.colors.primary}`,
+                        } : currentStep.continueButton.style === 'text' ? {
+                          backgroundColor: 'transparent',
+                          color: theme.colors.text,
+                          border: 'none',
+                          opacity: 0.7,
+                        } : {
+                          backgroundColor: theme.colors.primary,
+                          color: 'white',
+                          border: 'none',
+                        }),
                       }}
                     >
-                      {isSubmitting ? 'Submitting...' : isLastStep ? 'Submit' : currentStep.continueButton.label}
+                      {isSubmitting ? 'Submitting...' : isLastStep ? (currentStep.continueButton.label || 'Submit') : currentStep.continueButton.label}
                     </button>
                   )}
                 </div>
@@ -783,6 +1024,18 @@ function QuestionField({
     fontSize: theme.inputs.fontSize,
     border: `${theme.borders.width}px ${theme.borders.style} ${error ? theme.colors.error : theme.colors.border}`,
   };
+
+  // For radio options that allow custom text ("Other"): the option's stored
+  // value becomes the user's typed text. Track whether such an option is the
+  // active selection so the correct radio stays checked while typing.
+  const radioFixedValues = useMemo(
+    () => new Set((question.options || []).filter((o) => !o.allowCustomInput).map((o) => o.value)),
+    [question.options]
+  );
+  const hasCustomOption = (question.options || []).some((o) => o.allowCustomInput);
+  const [customOptionActive, setCustomOptionActive] = useState<boolean>(
+    () => hasCustomOption && value != null && value !== '' && !radioFixedValues.has(value)
+  );
 
   const renderField = () => {
     switch (question.type) {
@@ -860,23 +1113,88 @@ function QuestionField({
           />
         );
       
+      case 'year': {
+        const maxYear = question.maxYearCurrent
+          ? new Date().getFullYear()
+          : (question.maxYear ?? new Date().getFullYear());
+        const minYear = question.minYear ?? 1900;
+        if ((question.yearInputStyle || 'dropdown') === 'text') {
+          return (
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={4}
+              value={value || ''}
+              onChange={(e) => onChange(e.target.value.replace(/[^0-9]/g, ''))}
+              onKeyDown={onKeyDown}
+              placeholder={question.placeholder || 'e.g. 2021'}
+              style={inputStyle}
+            />
+          );
+        }
+        const years: number[] = [];
+        for (let y = maxYear; y >= minYear; y--) years.push(y);
+        return (
+          <select
+            value={value || ''}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={onKeyDown}
+            style={inputStyle}
+          >
+            <option value="">{question.placeholder || 'Select year...'}</option>
+            {years.map((y) => (
+              <option key={y} value={String(y)}>
+                {y}
+              </option>
+            ))}
+          </select>
+        );
+      }
+
       case 'radio':
         return (
           <div className="radio-group">
-            {question.options?.map((option) => (
-              <label key={option.id} className="radio-option" style={{ border: `${theme.borders.width}px ${theme.borders.style} ${value === option.value ? theme.colors.primary : theme.colors.border}` }}>
-                <input
-                  type="radio"
-                  name={question.id}
-                  value={option.value}
-                  checked={value === option.value}
-                  onChange={(e) => onChange(e.target.value)}
-                  style={{ border: `${theme.borders.width}px solid ${value === option.value ? theme.colors.primary : theme.colors.border}` }}
-                />
-                {option.imageUrl && <img src={option.imageUrl} alt={option.label} style={{ maxWidth: '100%', maxHeight: '80px', objectFit: 'contain', borderRadius: '4px' }} />}
-                <span>{option.label}</span>
-              </label>
-            ))}
+            {question.options?.map((option) => {
+              const isSelected = option.allowCustomInput
+                ? customOptionActive
+                : !customOptionActive && value === option.value;
+              return (
+                <React.Fragment key={option.id}>
+                  <label className="radio-option" style={{ border: `${theme.borders.width}px ${theme.borders.style} ${isSelected ? theme.colors.primary : theme.colors.border}` }}>
+                    <input
+                      type="radio"
+                      name={question.id}
+                      value={option.value}
+                      checked={isSelected}
+                      onChange={() => {
+                        if (option.allowCustomInput) {
+                          setCustomOptionActive(true);
+                          onChange('');
+                        } else {
+                          setCustomOptionActive(false);
+                          onChange(option.value);
+                        }
+                      }}
+                      style={{ border: `${theme.borders.width}px solid ${isSelected ? theme.colors.primary : theme.colors.border}` }}
+                    />
+                    {option.imageUrl && <img src={option.imageUrl} alt={option.label} style={{ maxWidth: '100%', maxHeight: '80px', objectFit: 'contain', borderRadius: '4px' }} />}
+                    <span>{option.label}</span>
+                  </label>
+                  {option.allowCustomInput && customOptionActive && (
+                    <input
+                      type="text"
+                      className="radio-other-input"
+                      value={value || ''}
+                      placeholder={question.placeholder || 'Please specify...'}
+                      onChange={(e) => onChange(e.target.value)}
+                      onKeyDown={onKeyDown}
+                      autoFocus
+                      style={{ ...inputStyle, marginTop: '8px' }}
+                    />
+                  )}
+                </React.Fragment>
+              );
+            })}
           </div>
         );
       

@@ -4,10 +4,21 @@ import { ProgressMode, ProgressBarPosition } from '../types';
 
 export function ProgressBarEditor() {
   const { state, dispatch } = useBuilder();
-  const { progressConfig } = state.form;
+  const project = state.currentProject;
+  // When the form inherits progress settings, edit the project defaults so all
+  // inheriting forms stay consistent.
+  const editingProjectProgress = !!(project && state.form.inheritance?.progress);
+  const progressConfig = editingProjectProgress ? project!.defaults.progress : state.form.progressConfig;
 
   const updateConfig = (updates: Partial<typeof progressConfig>) => {
-    dispatch({ type: 'UPDATE_PROGRESS_CONFIG', payload: updates });
+    if (editingProjectProgress && project) {
+      dispatch({
+        type: 'UPDATE_PROJECT_DEFAULTS',
+        payload: { progress: { ...project.defaults.progress, ...updates } },
+      });
+    } else {
+      dispatch({ type: 'UPDATE_PROGRESS_CONFIG', payload: updates });
+    }
   };
 
   const progressModes: { value: ProgressMode; label: string; description: string }[] = [
@@ -31,6 +42,12 @@ export function ProgressBarEditor() {
       <div className="editor-header">
         <h3>Progress Bar</h3>
       </div>
+
+      {editingProjectProgress && (
+        <div className="project-edit-banner">
+          🎨 Editing the <strong>{project!.name}</strong> project progress settings. Changes apply to all forms that inherit it.
+        </div>
+      )}
 
       <div className="editor-section">
         <div className="form-group checkbox-group">

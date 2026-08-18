@@ -1,28 +1,38 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getUserForms, deleteForm, SavedForm } from '../services/formService';
-import { Form, Step } from '../types';
+import {
+  getUserForms,
+  deleteForm,
+  SavedForm,
+  getUserProjects,
+  saveProject,
+  SavedProject,
+} from '../services/formService';
+import { createProject } from '../utils/defaults';
+import { Form, Step, Project } from '../types';
 
 interface FormsListProps {
-  onLoadForm: (form: Form, firestoreId?: string) => void;
-  onNewForm: () => void;
+  onLoadForm: (form: Form, firestoreId: string | undefined, project: Project | null) => void;
+  onNewForm: (project: Project | null) => void;
   onBack: () => void;
+  onViewAnalytics?: (formId: string) => void;
 }
 
-export function FormsList({ onLoadForm, onNewForm, onBack }: FormsListProps) {
+export function FormsList({ onLoadForm, onNewForm, onBack, onViewAnalytics }: FormsListProps) {
   const { user } = useAuth();
   const [forms, setForms] = useState<SavedForm[]>([]);
+  const [projects, setProjects] = useState<SavedProject[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('all');
+  const [creatingProject, setCreatingProject] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadForms();
-  }, [user]);
-
-  const loadForms = async () => {
+  const loadData = useCallback(async () => {
     if (!user) {
       setForms([]);
+      setProjects([]);
       setLoading(false);
       return;
     }
@@ -30,12 +40,41 @@ export function FormsList({ onLoadForm, onNewForm, onBack }: FormsListProps) {
     try {
       setLoading(true);
       setError(null);
-      const userForms = await getUserForms(user.uid);
+      const [userForms, userProjects] = await Promise.all([
+        getUserForms(user.uid),
+        getUserProjects(user.uid),
+      ]);
       setForms(userForms);
+      setProjects(userProjects);
     } catch (err: any) {
       setError(err.message || 'Failed to load forms');
     } finally {
       setLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const projectById = useCallback(
+    (id?: string): Project | null => projects.find((p) => p.id === id)?.project || null,
+    [projects]
+  );
+
+  const handleCreateProject = async () => {
+    if (!user || !newProjectName.trim()) return;
+    try {
+      const project = createProject(newProjectName.trim());
+      await saveProject(user.uid, project);
+      setNewProjectName('');
+      setCreatingProject(false);
+      await loadData();
+      setSelectedProjectId(project.id);
+      // Immediately start a new form inside the freshly created project.
+      onNewForm(project);
+    } catch (err: any) {
+      setError(err.message || 'Failed to create project');
     }
   };
 
@@ -56,8 +95,16 @@ export function FormsList({ onLoadForm, onNewForm, onBack }: FormsListProps) {
   };
 
   const handleLoad = (savedForm: SavedForm) => {
-    onLoadForm(savedForm.form, savedForm.id);
+    onLoadForm(savedForm.form, savedForm.id, projectById(savedForm.form.projectId));
   };
+
+  const selectedProject = selectedProjectId === 'all' ? null : projectById(selectedProjectId);
+
+  const visibleForms = forms.filter((f) => {
+    if (selectedProjectId === 'all') return true;
+    if (selectedProjectId === 'none') return !f.form.projectId;
+    return f.form.projectId === selectedProjectId;
+  });
 
   const formatDate = (timestamp: any) => {
     if (!timestamp) return 'Unknown';
@@ -78,9 +125,51 @@ export function FormsList({ onLoadForm, onNewForm, onBack }: FormsListProps) {
           ← Back
         </button>
         <h1>My Forms</h1>
-        <button className="btn-new-form" onClick={onNewForm}>
+        <button className="btn-new-form" onClick={() => onNewForm(selectedProject)}>
           + New Form
         </button>
+      </div>
+
+      <div className="projects-bar">
+        <label htmlFor="project-filter">Project:</label>
+        <select
+          id="project-filter"
+          value={selectedProjectId}
+          onChange={(e) => setSelectedProjectId(e.target.value)}
+        >
+          <option value="all">All forms</option>
+          <option value="none">No project</option>
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.project.name}
+            </option>
+          ))}
+        </select>
+        {creatingProject ? (
+          <span className="project-create">
+            <input
+              type="text"
+              value={newProjectName}
+              autoFocus
+              placeholder="Project name"
+              onChange={(e) => setNewProjectName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleCreateProject();
+                if (e.key === 'Escape') setCreatingProject(false);
+              }}
+            />
+            <button className="btn-small" onClick={handleCreateProject} disabled={!newProjectName.trim()}>
+              Create
+            </button>
+            <button className="btn-small btn-secondary" onClick={() => setCreatingProject(false)}>
+              Cancel
+            </button>
+          </span>
+        ) : (
+          <button className="btn-small" onClick={() => setCreatingProject(true)}>
+            + New Project
+          </button>
+        )}
       </div>
 
       {error && <div className="forms-list-error">{error}</div>}
@@ -90,18 +179,18 @@ export function FormsList({ onLoadForm, onNewForm, onBack }: FormsListProps) {
           <div className="loading-spinner"></div>
           <p>Loading your forms...</p>
         </div>
-      ) : forms.length === 0 ? (
+      ) : visibleForms.length === 0 ? (
         <div className="forms-list-empty">
           <div className="empty-icon">📝</div>
           <h2>No Forms Yet</h2>
           <p>Create your first form to get started</p>
-          <button className="btn-create-first" onClick={onNewForm}>
+          <button className="btn-create-first" onClick={() => onNewForm(selectedProject)}>
             Create Your First Form
           </button>
         </div>
       ) : (
         <div className="forms-grid">
-          {forms.map(savedForm => (
+          {visibleForms.map(savedForm => (
             <div key={savedForm.id} className="form-card">
               <div className="form-card-header">
                 <h3>{savedForm.form.name}</h3>
@@ -149,6 +238,15 @@ export function FormsList({ onLoadForm, onNewForm, onBack }: FormsListProps) {
                 >
                   Edit Form
                 </button>
+                {onViewAnalytics && (
+                  <button
+                    className="btn-load-form"
+                    onClick={() => onViewAnalytics(savedForm.form.id)}
+                    title="View analytics"
+                  >
+                    📊 Analytics
+                  </button>
+                )}
                 <button
                   className="btn-delete-form"
                   onClick={() => handleDelete(savedForm.id!, savedForm.form.name)}

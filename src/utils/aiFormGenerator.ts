@@ -1,11 +1,19 @@
-import { Form, Step, Question, QuestionType, QuestionOption, Theme } from '../types';
-import { createForm, createStep, createQuestion, generateId, createDefaultTheme } from './defaults';
+import { Form, Step, Question, QuestionType, QuestionOption, Theme, Project } from '../types';
+import { createForm, createStep, createQuestion, generateId, createDefaultTheme, createDefaultInheritance, generateChildId } from './defaults';
 
 /**
  * OpenAI API Configuration - uses environment variables
  */
 const OPENAI_API_KEY = process.env.REACT_APP_OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.REACT_APP_OPENAI_MODEL || 'gpt-4';
+
+/** All question types the builder supports. Used to validate AI output. */
+const VALID_QUESTION_TYPES: QuestionType[] = [
+  'text', 'textarea', 'email', 'phone', 'number', 'currency', 'radio',
+  'checkbox', 'select', 'multiselect', 'date', 'time', 'datetime', 'year',
+  'file', 'rating', 'slider', 'hidden', 'eircode', 'numberplate',
+  'privacy_policy', 'helper_text',
+];
 
 /**
  * Parsed form structure from AI response
@@ -50,14 +58,24 @@ export function isOpenAIConfigured(): boolean {
 }
 
 /**
+ * Options controlling AI generation.
+ */
+export interface GenerateFormOptions {
+  // When provided, the generated form is linked to this project, inherits its
+  // sections, and the AI is constrained to the project's design tokens.
+  project?: Project | null;
+}
+
+/**
  * Generate a form using OpenAI based on user prompt
  */
-export async function generateFormWithAI(prompt: string): Promise<Form> {
+export async function generateFormWithAI(prompt: string, options: GenerateFormOptions = {}): Promise<Form> {
   if (!OPENAI_API_KEY) {
     throw new Error('OpenAI API key not configured. Please add REACT_APP_OPENAI_API_KEY to your .env file.');
   }
 
-  const systemPrompt = buildSystemPrompt();
+  const { project } = options;
+  const systemPrompt = buildSystemPrompt(project || null);
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -71,8 +89,10 @@ export async function generateFormWithAI(prompt: string): Promise<Form> {
         { role: 'system', content: systemPrompt },
         { role: 'user', content: prompt },
       ],
-      temperature: 0.7,
+      // Lower temperature for deterministic, review-ready output.
+      temperature: 0.2,
       max_tokens: 4000,
+      response_format: { type: 'json_object' },
     }),
   });
 
@@ -88,15 +108,16 @@ export async function generateFormWithAI(prompt: string): Promise<Form> {
     throw new Error('No response from OpenAI');
   }
 
-  return parseAIResponseToForm(content);
+  return parseAIResponseToForm(content, project || null);
 }
 
 /**
  * Build system prompt for AI
  */
-function buildSystemPrompt(): string {
-  return `You are a form builder AI assistant. When given a description of a form, you generate a JSON structure for that form.
-
+function buildSystemPrompt(project: Project | null): string {
+  const projectSection = project ? buildProjectConstraints(project) : '';
+  return `You are an expert form builder AI. Given a description, you produce a complete, production-ready multi-step form as strict JSON. Your output should be good enough to publish WITHOUT manual review.
+${projectSection}
 Available question types:
 - text: Single line text input
 - textarea: Multi-line text input
@@ -111,9 +132,11 @@ Available question types:
 - date: Date picker
 - time: Time picker
 - datetime: Date and time picker
+- year: Year selector (dropdown or text)
 - file: File upload
 - rating: Star rating (1-5)
 - slider: Range slider
+- hidden: Hidden field (not shown to user)
 - eircode: Irish postcode
 - numberplate: Vehicle registration
 - privacy_policy: Privacy policy acceptance checkbox with link
@@ -150,43 +173,65 @@ Respond ONLY with a valid JSON object in this exact format:
   ]
 }
 
-Guidelines:
-1. Group related questions into logical steps
-2. Use appropriate question types for the data being collected
-3. Keep step titles concise but descriptive
-4. Add helpful placeholders and help text
-5. Mark essential fields as required
-6. For choice questions, provide relevant options
-7. ALWAYS include fieldName for each question using snake_case (e.g., "full_name", "email_address", "phone_number")
-8. If the user mentions colors, styling, or themes, set the theme object accordingly
-9. Common fieldNames: full_name, first_name, last_name, email, phone, address, city, country, message, comments, company, job_title, date_of_birth, etc.`;
+Guidelines (follow strictly so output needs no review):
+1. Group related questions into logical, short steps (aim for 1-4 questions per step for multi-step flows).
+2. Use the most specific appropriate question type (e.g. email for emails, phone for phones, year for years, privacy_policy for consent, eircode for Irish postcodes).
+3. ALWAYS include a snake_case fieldName for every question (e.g. "full_name", "email_address"). Never omit it.
+4. Only use question types from the list above. Never invent a type.
+5. Mark genuinely required fields as required; do not over-require optional fields.
+6. For radio/checkbox/select/multiselect, always provide sensible, non-empty options.
+7. Use helper_text blocks for section intros/instructions instead of empty labels.
+8. Include a privacy_policy consent question when collecting personal data.
+9. Keep step titles concise and human; add helpful placeholders and helpText.
+10. Common fieldNames: full_name, first_name, last_name, email, phone, address, city, country, message, comments, company, job_title, date_of_birth.`;
+}
+
+/**
+ * Build the strict project-token constraint block injected into the prompt.
+ */
+function buildProjectConstraints(project: Project): string {
+  const t = project.defaults.theme;
+  return `
+PROJECT DESIGN SYSTEM (STRICT):
+This form belongs to the project "${project.name}". It MUST stay visually consistent with the project.
+- Do NOT invent new colors, fonts, or border styles. The project controls all theming.
+- Omit the "theme" object entirely, or mirror these exact tokens if you include it:
+  primaryColor=${t.colors.primary}, secondaryColor=${t.colors.secondary}, backgroundColor=${t.colors.background}, textColor=${t.colors.text}, borderRadius=${t.borders.radius}, fontFamily=${t.typography.fontFamily}.
+- Focus only on the form's structure, steps, and questions. Theme, layout, progress, submission, and plugin settings are inherited from the project.
+`;
 }
 
 /**
  * Parse AI response content to Form object
  */
-function parseAIResponseToForm(content: string): Form {
+function parseAIResponseToForm(content: string, project: Project | null): Form {
   // Extract JSON from response (handle markdown code blocks)
   let jsonString = content;
   const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (jsonMatch) {
     jsonString = jsonMatch[1];
   }
-  
-  const parsed: ParsedFormStructure = JSON.parse(jsonString.trim());
-  return buildFormFromParsed(parsed);
+
+  let parsed: ParsedFormStructure;
+  try {
+    parsed = JSON.parse(jsonString.trim());
+  } catch {
+    throw new Error('AI returned invalid JSON. Please try again or rephrase your prompt.');
+  }
+  return buildFormFromParsed(parsed, project);
 }
 
 /**
  * Build Form object from parsed structure
  */
-function buildFormFromParsed(parsed: ParsedFormStructure): Form {
-  const form = createForm();
+function buildFormFromParsed(parsed: ParsedFormStructure, project: Project | null): Form {
+  const form = project ? createForm({ project }) : createForm();
   form.name = parsed.name || 'AI Generated Form';
   form.description = parsed.description || '';
-  
-  // Apply theme if provided
-  if (parsed.theme) {
+
+  // In strict project mode the theme is inherited; ignore any AI-provided
+  // theme so the form stays consistent with the project design system.
+  if (parsed.theme && !project) {
     const defaultTheme = createDefaultTheme();
     form.theme = {
       ...defaultTheme,
@@ -224,7 +269,7 @@ function buildFormFromParsed(parsed: ParsedFormStructure): Form {
   
   // Build steps
   parsed.steps.forEach((parsedStep, stepIndex) => {
-    const step = createStep(stepIndex);
+    const step = createStep(stepIndex, project?.defaults.layout);
     step.title = parsedStep.title || `Step ${stepIndex + 1}`;
     step.description = parsedStep.description || '';
     step.questions = [];
@@ -232,8 +277,9 @@ function buildFormFromParsed(parsed: ParsedFormStructure): Form {
     // Build questions (skip if no questions)
     if (parsedStep.questions && Array.isArray(parsedStep.questions)) {
       parsedStep.questions.forEach((parsedQuestion, questionIndex) => {
-        // Skip invalid questions
+        // Skip invalid questions and unknown/hallucinated types
         if (!parsedQuestion || !parsedQuestion.type) return;
+        if (!VALID_QUESTION_TYPES.includes(parsedQuestion.type)) return;
         
         const question = createQuestion(parsedQuestion.type, questionIndex + 1);
         question.label = parsedQuestion.label || 'Question';
@@ -291,13 +337,20 @@ function buildFormFromParsed(parsed: ParsedFormStructure): Form {
     }
   });
   
-  // Update plugin settings based on form name
+  // Update plugin settings based on form name. In project mode the plugin
+  // settings are inherited from the project, so we only set a stable childId
+  // used by the project shortcode: [project_shortcode id="childId"].
   const slug = form.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-  form.pluginSettings.pluginName = form.name;
-  form.pluginSettings.pluginSlug = slug || 'ai-generated-form';
-  form.pluginSettings.shortcode = slug.replace(/-/g, '_') || 'ai_form';
-  form.pluginSettings.pluginDescription = parsed.description || `A form for ${form.name}`;
-  
+  if (project) {
+    form.childId = generateChildId(form.name);
+    form.inheritance = createDefaultInheritance(true);
+  } else {
+    form.pluginSettings.pluginName = form.name;
+    form.pluginSettings.pluginSlug = slug || 'ai-generated-form';
+    form.pluginSettings.shortcode = slug.replace(/-/g, '_') || 'ai_form';
+    form.pluginSettings.pluginDescription = parsed.description || `A form for ${form.name}`;
+  }
+
   return form;
 }
 

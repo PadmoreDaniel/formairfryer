@@ -8,13 +8,14 @@ interface AIFormGeneratorProps {
 }
 
 export function AIFormGenerator({ isOpen, onClose }: AIFormGeneratorProps) {
-  const { dispatch } = useBuilder();
+  const { dispatch, state } = useBuilder();
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const examplePrompts = getExamplePrompts();
   const apiConfigured = isOpenAIConfigured();
+  const activeProject = state.currentProject;
 
   const handleGenerate = useCallback(async () => {
     if (!prompt.trim()) {
@@ -26,7 +27,7 @@ export function AIFormGenerator({ isOpen, onClose }: AIFormGeneratorProps) {
     setError(null);
 
     try {
-      const form = await generateFormWithAI(prompt);
+      const form = await generateFormWithAI(prompt, { project: activeProject });
       dispatch({ type: 'IMPORT_FORM', payload: form });
       onClose();
       setPrompt('');
@@ -35,7 +36,7 @@ export function AIFormGenerator({ isOpen, onClose }: AIFormGeneratorProps) {
     } finally {
       setIsGenerating(false);
     }
-  }, [prompt, dispatch, onClose]);
+  }, [prompt, dispatch, onClose, activeProject]);
 
   const handleExampleClick = (example: string) => {
     setPrompt(example);
@@ -70,6 +71,20 @@ export function AIFormGenerator({ isOpen, onClose }: AIFormGeneratorProps) {
               <div>
                 <strong>OpenAI API key not configured</strong>
                 <p>Add <code>REACT_APP_OPENAI_API_KEY</code> to your .env file to enable AI generation.</p>
+              </div>
+            </div>
+          )}
+
+          {activeProject && (
+            <div className="ai-project-note">
+              <span aria-hidden="true">🎨</span>
+              <div>
+                <strong>Strict project mode</strong>
+                <p>
+                  New forms inherit the <em>{activeProject.name}</em> design system
+                  (colors, fonts, layout, submission &amp; plugin settings). The AI
+                  focuses only on structure and questions.
+                </p>
               </div>
             </div>
           )}
