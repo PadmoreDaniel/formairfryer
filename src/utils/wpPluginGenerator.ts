@@ -1660,6 +1660,103 @@ export function generateFormJS(form: Form, childId?: string): string {
         log('Data Layer Event fired:', eventName, data);
     }
 
+    // ==================== Lead tracking ====================
+    // Same payload shape as the custom WordPress forms (see TRACKING.md in the
+    // Custom Wordpress Forms repo): ad attribution from the WP CID Tracking
+    // plugin plus visitor fields, sent in the submission body.
+    var UTM_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_id', 'utm_content', 'utm_term'];
+    var CLICK_ID_KEYS = ['gclid', 'gbraid', 'wbraid', 'fbclid', 'msclkid', 'ttclid', 'li_fat_id'];
+
+    // Ad attribution persisted by the WP CID Tracking plugin; falls back to the URL if the plugin is unavailable.
+    function getAdTracking() {
+        var cid = {};
+        try {
+            var tracking = window.WPCidTracking;
+            cid = tracking && typeof tracking.getAll === 'function'
+                ? tracking.getAll()
+                : Object.fromEntries(new URLSearchParams(window.location.search));
+        } catch (e) {
+            cid = {};
+        }
+        cid = cid || {};
+        var utmParams = {};
+        UTM_KEYS.forEach(function(key) {
+            if (cid[key]) utmParams[key] = cid[key];
+        });
+        var clickIds = {};
+        CLICK_ID_KEYS.forEach(function(key) {
+            if (cid[key]) clickIds[key] = cid[key];
+        });
+        var adSource = cid.utm_source || '';
+        if (!adSource && (cid.gclid || cid.gbraid || cid.wbraid)) adSource = 'google';
+        if (!adSource && cid.fbclid) adSource = 'fb';
+        var fbp = (document.cookie.match(/(?:^|;\\s*)_fbp=([^;]+)/) || [])[1] || '';
+        return Object.assign({ adSource: adSource, utmParams: utmParams }, utmParams, clickIds, { fbp: fbp });
+    }
+
+    function createUuid() {
+        try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            var r = Math.random() * 16 | 0; var v = c === 'x' ? r : (r & 0x3 | 0x8); return v.toString(16);
+        });
+    }
+
+    // Visitor id and returning-user flag are resolved on page load, matching the custom forms.
+    var visitorUuid = '';
+    var visitorReturning = false;
+    try {
+        visitorUuid = localStorage.getItem('uuid') || '';
+        if (!visitorUuid) {
+            visitorUuid = createUuid();
+            localStorage.setItem('uuid', visitorUuid);
+        }
+        visitorReturning = !!localStorage.getItem('hasVisited');
+        if (!visitorReturning) localStorage.setItem('hasVisited', 'true');
+    } catch (e) {
+        log('Unable to read visitor tracking storage', e);
+    }
+
+    // Fetch the IP up front so it is normally ready by the time the form is submitted.
+    var visitorIp = '';
+    var visitorIpReady = (window.fetch
+        ? fetch('https://api.ipify.org?format=json')
+            .then(function(res) { return res.json(); })
+            .then(function(data) { visitorIp = (data && data.ip) || ''; })
+            .catch(function(e) { log('Unable to fetch IP', e); })
+        : Promise.resolve());
+
+    function whenVisitorIpReady(callback) {
+        var done = false;
+        var finish = function() {
+            if (done) return;
+            done = true;
+            callback(visitorIp);
+        };
+        visitorIpReady.then(finish, finish);
+        setTimeout(finish, 2000);
+    }
+
+    function getPageVisits() {
+        var raw = null;
+        try { raw = sessionStorage.getItem('pageVisits') || localStorage.getItem('pageVisits'); } catch (e) {}
+        try {
+            var visits = JSON.parse(raw || '[]');
+            return Array.isArray(visits) ? visits : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function getLastInternalPage(pageVisits) {
+        if (!pageVisits.length) return '';
+        var assumedCurrent = (pageVisits[pageVisits.length - 1] || {}).page || '';
+        for (var i = pageVisits.length - 1; i >= 0; i--) {
+            var p = (pageVisits[i] || {}).page || '';
+            if (p && p !== assumedCurrent) return p;
+        }
+        return '';
+    }
+
     // ==================== Analytics (privacy-safe, step-level) ====================
     // Emits anonymous funnel/timing events to the configured endpoint. NEVER
     // includes answer values or PII — only step ids/indexes, timings, device,
@@ -3055,173 +3152,183 @@ export function generateFormJS(form: Form, childId?: string): string {
                 }
             });
             
-            // Attach page-history tracking values persisted by the
-            // wp-react-page-history-tracking plugin (same-origin storage).
-            try {
-                if (mergedFormData.referrer === undefined) {
-                    mergedFormData.referrer = localStorage.getItem('referrer') || '';
+            // Attach lead tracking fields; form answers and custom fields take precedence.
+            const pageVisits = getPageVisits();
+            let storedReferrer = '';
+            try { storedReferrer = localStorage.getItem('referrer') || ''; } catch (e) {}
+            const trackingFields = {
+                uuid: visitorUuid,
+                returningUser: visitorReturning,
+                pageVisits: pageVisits,
+                referrer: storedReferrer || 'Direct or unknown source',
+                lastInternalPage: getLastInternalPage(pageVisits),
+                ...getAdTracking()
+            };
+            Object.keys(trackingFields).forEach(key => {
+                if (mergedFormData[key] === undefined) {
+                    mergedFormData[key] = trackingFields[key];
                 }
-                if (mergedFormData.lastInternalPage === undefined) {
-                    const pageVisits = JSON.parse(sessionStorage.getItem('pageVisits') || '[]');
-                    let lastInternalPage = '';
-                    if (Array.isArray(pageVisits) && pageVisits.length > 0) {
-                        const assumedCurrent = (pageVisits[pageVisits.length - 1] || {}).page || '';
-                        for (let i = pageVisits.length - 1; i >= 0; i--) {
-                            const p = (pageVisits[i] || {}).page || '';
-                            if (p && p !== assumedCurrent) {
-                                lastInternalPage = p;
-                                break;
-                            }
-                        }
+            });
+
+            whenVisitorIpReady((ip) => {
+                if (mergedFormData.ip === undefined) {
+                    mergedFormData.ip = ip;
+                }
+
+                // Use custom URL if configured, otherwise use WordPress AJAX
+                const useCustomUrl = submissionConfig.url && submissionConfig.url.trim() !== '';
+                let submitUrl = useCustomUrl ? submissionConfig.url : config.ajaxUrl;
+                if (useCustomUrl && submissionConfig.appendWPCidParamsToSubmissionUrl !== false) {
+                  try {
+                    if (window.WPCidTracking && typeof window.WPCidTracking.appendTo === 'function') {
+                      submitUrl = window.WPCidTracking.appendTo(submitUrl);
                     }
-                    mergedFormData.lastInternalPage = lastInternalPage;
+                  } catch (e) {
+                    log('Unable to append WP CID params to submission URL', e);
+                  }
                 }
-            } catch (e) {
-                log('Unable to read page-history tracking values', e);
-            }
-            
-            // Use custom URL if configured, otherwise use WordPress AJAX
-            const useCustomUrl = submissionConfig.url && submissionConfig.url.trim() !== '';
-            let submitUrl = useCustomUrl ? submissionConfig.url : config.ajaxUrl;
-            if (useCustomUrl && submissionConfig.appendWPCidParamsToSubmissionUrl !== false) {
-              try {
-                if (window.WPCidTracking && typeof window.WPCidTracking.appendTo === 'function') {
-                  submitUrl = window.WPCidTracking.appendTo(submitUrl);
-                }
-              } catch (e) {
-                log('Unable to append WP CID params to submission URL', e);
-              }
-            }
-            const submitData = useCustomUrl 
-                ? mergedFormData 
-                : {
-                    action: '${pluginSettings.pluginSlug.replace(/-/g, '_')}_submit',
-                    childId: '${childId || ''}',
-                    nonce: config.nonce,
-                    formData: JSON.stringify(mergedFormData)
-                };
-            const requestHeaders = useCustomUrl && submissionConfig.headers && typeof submissionConfig.headers === 'object'
-              ? submissionConfig.headers
-              : undefined;
-            
-            log('Submitting to', submitUrl, 'with data', submitData);
-            
-            $.ajax({
-                url: submitUrl,
-                type: submissionConfig.method || 'POST',
-                data: useCustomUrl ? JSON.stringify(submitData) : submitData,
-                contentType: useCustomUrl ? 'application/json' : 'application/x-www-form-urlencoded; charset=UTF-8',
-              headers: requestHeaders,
-                success: (response) => {
-                    this.hideLoading();
-                    log('Submit response', response);
-                    
-                    // For custom URLs, any response is considered success
-                    const isSuccess = useCustomUrl ? true : (response && response.success);
-                    
-                    if (isSuccess) {
-                        this._submitted = true;
-                        try { analytics.submitSuccess(this.stepHistory.length + 1); } catch (e) {}
-                        // Complete the progress bar on success
-                        this.container.find('.wp-form-progress-fill').css('width', '100%');
-                        this.container.find('.wp-form-progress-percentage').text('100%');
+                const submitData = useCustomUrl 
+                    ? mergedFormData 
+                    : {
+                        action: '${pluginSettings.pluginSlug.replace(/-/g, '_')}_submit',
+                        childId: '${childId || ''}',
+                        nonce: config.nonce,
+                        formData: JSON.stringify(mergedFormData)
+                    };
+                const requestHeaders = useCustomUrl && submissionConfig.headers && typeof submissionConfig.headers === 'object'
+                  ? submissionConfig.headers
+                  : undefined;
+                
+                log('Submitting to', submitUrl, 'with data', submitData);
+                
+                $.ajax({
+                    url: submitUrl,
+                    type: submissionConfig.method || 'POST',
+                    data: useCustomUrl ? JSON.stringify(submitData) : submitData,
+                    contentType: useCustomUrl ? 'application/json' : 'application/x-www-form-urlencoded; charset=UTF-8',
+                  headers: requestHeaders,
+                    success: (response) => {
+                        this.hideLoading();
+                        log('Submit response', response);
                         
-                        // Handle redirect if specified (check submissionConfig first, then response)
-                        const defaultRedirectUrl = submissionConfig.redirectOnSuccess || 
-                            (response && response.data && response.data.redirect);
+                        // For custom URLs, any response is considered success
+                        const isSuccess = useCustomUrl ? true : (response && response.success);
                         
-                        // Send data layer event if configured
-                        if (submissionConfig.dataLayerEventName) {
-                            sendDataLayerEvent(submissionConfig.dataLayerEventName, {
-                                formId: formConfig.id || '${form.id}',
-                                formName: formConfig.name || '${escapePhpString(form.name)}',
-                                formData: mergedFormData
-                            });
-                        }
-                        
-                        // Evaluate post-submission redirect rules (priority order, first match wins)
-                        const postRules = submissionConfig.postSubmissionRules || [];
-                        if (postRules.length > 0) {
-                            const sortedRules = [...postRules].sort((a, b) => b.priority - a.priority);
-                            let ruleMatched = false;
+                        if (isSuccess) {
+                            this._submitted = true;
+                            try { analytics.submitSuccess(this.stepHistory.length + 1); } catch (e) {}
+                            // Complete the progress bar on success
+                            this.container.find('.wp-form-progress-fill').css('width', '100%');
+                            this.container.find('.wp-form-progress-percentage').text('100%');
                             
-                            const processRuleRedirect = (url) => {
-                                if (submissionConfig.skipThankYouPage) {
-                                    log('Post-submission rule: skipping thank you, redirecting to', url);
-                                    window.location.href = url;
-                                } else {
-                                    this.form.fadeOut(200, () => {
-                                        this.container.find('.wp-form-success').fadeIn(200);
-                                    });
-                                    log('Post-submission rule: showing success then redirecting to', url);
-                                    setTimeout(() => { window.location.href = url; }, 2000);
-                                }
-                            };
+                            // Handle redirect if specified (check submissionConfig first, then response)
+                            const defaultRedirectUrl = submissionConfig.redirectOnSuccess || 
+                                (response && response.data && response.data.redirect);
                             
-                            for (const rule of sortedRules) {
-                                if (rule.condition.rules.length === 0 || this.evaluateCondition(rule.condition)) {
-                                    ruleMatched = true;
-                                    
-                                    if (rule.target.type === 'url' && rule.target.url) {
-                                        processRuleRedirect(rule.target.url);
-                                        return;
-                                    } else if (rule.target.type === 'api' && rule.target.url) {
-                                        // Make secondary API call to determine redirect
-                                        const apiConfig = rule.target.apiConfig || {};
-                                        let apiBody = null;
-                                        if (apiConfig.method !== 'GET' && apiConfig.bodyTemplate) {
-                                            apiBody = apiConfig.bodyTemplate.replace(
-                                                /\\{\\{(\\w+)\\}\\}/g,
-                                                (_, field) => mergedFormData[field] || ''
-                                            );
-                                        }
+                            // Send data layer event if configured
+                            if (submissionConfig.dataLayerEventName) {
+                                sendDataLayerEvent(submissionConfig.dataLayerEventName, {
+                                    formId: formConfig.id || '${form.id}',
+                                    formName: formConfig.name || '${escapePhpString(form.name)}',
+                                    uuid: mergedFormData.uuid || ''
+                                });
+                            }
+                            
+                            // Evaluate post-submission redirect rules (priority order, first match wins)
+                            const postRules = submissionConfig.postSubmissionRules || [];
+                            if (postRules.length > 0) {
+                                const sortedRules = [...postRules].sort((a, b) => b.priority - a.priority);
+                                let ruleMatched = false;
+                                
+                                const processRuleRedirect = (url) => {
+                                    if (submissionConfig.skipThankYouPage) {
+                                        log('Post-submission rule: skipping thank you, redirecting to', url);
+                                        window.location.href = url;
+                                    } else {
+                                        this.form.fadeOut(200, () => {
+                                            this.container.find('.wp-form-success').fadeIn(200);
+                                        });
+                                        log('Post-submission rule: showing success then redirecting to', url);
+                                        setTimeout(() => { window.location.href = url; }, 2000);
+                                    }
+                                };
+                                
+                                for (const rule of sortedRules) {
+                                    if (rule.condition.rules.length === 0 || this.evaluateCondition(rule.condition)) {
+                                        ruleMatched = true;
                                         
-                                        $.ajax({
-                                            url: rule.target.url,
-                                            type: apiConfig.method || 'POST',
-                                            data: apiBody,
-                                            contentType: 'application/json',
-                                            headers: apiConfig.headers || {},
-                                            success: (apiResponse) => {
-                                                log('Post-submission API response', apiResponse);
-                                                // Extract value from response using dot-notation path
-                                                const redirectField = apiConfig.redirectField || '';
-                                                let responseValue = apiResponse;
-                                                if (redirectField) {
-                                                    const parts = redirectField.split('.');
-                                                    for (const part of parts) {
-                                                        responseValue = responseValue && responseValue[part];
-                                                    }
-                                                }
-                                                
-                                                if (responseValue) {
-                                                    // Check response-to-URL mapping
-                                                    const mappings = apiConfig.responseRedirectMap || [];
-                                                    const matchedMapping = mappings.find(m => m.value === String(responseValue));
-                                                    
-                                                    let finalUrl = null;
-                                                    if (matchedMapping) {
-                                                        finalUrl = matchedMapping.url;
-                                                        log('API response mapped:', responseValue, '->', finalUrl);
-                                                    } else if (typeof responseValue === 'string' && responseValue.startsWith('http')) {
-                                                        // Response value is a direct URL
-                                                        finalUrl = responseValue;
-                                                        log('API returned direct redirect URL:', finalUrl);
-                                                    } else {
-                                                        // No mapping matched, use default from apiConfig or global default
-                                                        finalUrl = apiConfig.defaultRedirectUrl || defaultRedirectUrl;
-                                                        log('No mapping matched for:', responseValue, '- using default:', finalUrl);
+                                        if (rule.target.type === 'url' && rule.target.url) {
+                                            processRuleRedirect(rule.target.url);
+                                            return;
+                                        } else if (rule.target.type === 'api' && rule.target.url) {
+                                            // Make secondary API call to determine redirect
+                                            const apiConfig = rule.target.apiConfig || {};
+                                            let apiBody = null;
+                                            if (apiConfig.method !== 'GET' && apiConfig.bodyTemplate) {
+                                                apiBody = apiConfig.bodyTemplate.replace(
+                                                    /\\{\\{(\\w+)\\}\\}/g,
+                                                    (_, field) => mergedFormData[field] || ''
+                                                );
+                                            }
+                                            
+                                            $.ajax({
+                                                url: rule.target.url,
+                                                type: apiConfig.method || 'POST',
+                                                data: apiBody,
+                                                contentType: 'application/json',
+                                                headers: apiConfig.headers || {},
+                                                success: (apiResponse) => {
+                                                    log('Post-submission API response', apiResponse);
+                                                    // Extract value from response using dot-notation path
+                                                    const redirectField = apiConfig.redirectField || '';
+                                                    let responseValue = apiResponse;
+                                                    if (redirectField) {
+                                                        const parts = redirectField.split('.');
+                                                        for (const part of parts) {
+                                                            responseValue = responseValue && responseValue[part];
+                                                        }
                                                     }
                                                     
-                                                    if (finalUrl) {
-                                                        processRuleRedirect(finalUrl);
+                                                    if (responseValue) {
+                                                        // Check response-to-URL mapping
+                                                        const mappings = apiConfig.responseRedirectMap || [];
+                                                        const matchedMapping = mappings.find(m => m.value === String(responseValue));
+                                                        
+                                                        let finalUrl = null;
+                                                        if (matchedMapping) {
+                                                            finalUrl = matchedMapping.url;
+                                                            log('API response mapped:', responseValue, '->', finalUrl);
+                                                        } else if (typeof responseValue === 'string' && responseValue.startsWith('http')) {
+                                                            // Response value is a direct URL
+                                                            finalUrl = responseValue;
+                                                            log('API returned direct redirect URL:', finalUrl);
+                                                        } else {
+                                                            // No mapping matched, use default from apiConfig or global default
+                                                            finalUrl = apiConfig.defaultRedirectUrl || defaultRedirectUrl;
+                                                            log('No mapping matched for:', responseValue, '- using default:', finalUrl);
+                                                        }
+                                                        
+                                                        if (finalUrl) {
+                                                            processRuleRedirect(finalUrl);
+                                                        } else {
+                                                            this.form.fadeOut(200, () => {
+                                                                this.container.find('.wp-form-success').fadeIn(200);
+                                                            });
+                                                        }
                                                     } else {
-                                                        this.form.fadeOut(200, () => {
-                                                            this.container.find('.wp-form-success').fadeIn(200);
-                                                        });
+                                                        log('Post-submission API: no value at field path, using default');
+                                                        if (defaultRedirectUrl) {
+                                                            processRuleRedirect(defaultRedirectUrl);
+                                                        } else {
+                                                            this.form.fadeOut(200, () => {
+                                                                this.container.find('.wp-form-success').fadeIn(200);
+                                                            });
+                                                        }
                                                     }
-                                                } else {
-                                                    log('Post-submission API: no value at field path, using default');
+                                                },
+                                                error: (xhr, status, err) => {
+                                                    log('Post-submission API error', status, err);
+                                                    // Fall back to default redirect or success
                                                     if (defaultRedirectUrl) {
                                                         processRuleRedirect(defaultRedirectUrl);
                                                     } else {
@@ -3230,62 +3337,51 @@ export function generateFormJS(form: Form, childId?: string): string {
                                                         });
                                                     }
                                                 }
-                                            },
-                                            error: (xhr, status, err) => {
-                                                log('Post-submission API error', status, err);
-                                                // Fall back to default redirect or success
-                                                if (defaultRedirectUrl) {
-                                                    processRuleRedirect(defaultRedirectUrl);
-                                                } else {
-                                                    this.form.fadeOut(200, () => {
-                                                        this.container.find('.wp-form-success').fadeIn(200);
-                                                    });
-                                                }
-                                            }
-                                        });
-                                        return;
+                                            });
+                                            return;
+                                        }
+                                        break;
                                     }
-                                    break;
                                 }
+                                
+                                if (ruleMatched) return;
                             }
                             
-                            if (ruleMatched) return;
-                        }
-                        
-                        // Skip thank you page and redirect immediately if configured
-                        if (submissionConfig.skipThankYouPage && defaultRedirectUrl) {
-                            log('Skipping thank you page, redirecting immediately to', defaultRedirectUrl);
-                            window.location.href = defaultRedirectUrl;
-                            return;
-                        }
-                        
-                        // Show success message
-                        this.form.fadeOut(200, () => {
-                            this.container.find('.wp-form-success').fadeIn(200);
-                        });
-                        
-                        // Handle redirect after showing success message
-                        if (defaultRedirectUrl) {
-                            log('Redirecting to', defaultRedirectUrl);
-                            setTimeout(() => {
+                            // Skip thank you page and redirect immediately if configured
+                            if (submissionConfig.skipThankYouPage && defaultRedirectUrl) {
+                                log('Skipping thank you page, redirecting immediately to', defaultRedirectUrl);
                                 window.location.href = defaultRedirectUrl;
-                            }, 2000);
+                                return;
+                            }
+                            
+                            // Show success message
+                            this.form.fadeOut(200, () => {
+                                this.container.find('.wp-form-success').fadeIn(200);
+                            });
+                            
+                            // Handle redirect after showing success message
+                            if (defaultRedirectUrl) {
+                                log('Redirecting to', defaultRedirectUrl);
+                                setTimeout(() => {
+                                    window.location.href = defaultRedirectUrl;
+                                }, 2000);
+                            }
+                        } else {
+                            try { analytics.submitError(); } catch (e) {}
+                            const errorMsg = (response && response.data && response.data.message) 
+                                ? response.data.message 
+                                : 'Submission failed. Please try again.';
+                            this.showError(errorMsg);
                         }
-                    } else {
+                    },
+                    error: (xhr, status, error) => {
+                        this.hideLoading();
                         try { analytics.submitError(); } catch (e) {}
-                        const errorMsg = (response && response.data && response.data.message) 
-                            ? response.data.message 
-                            : 'Submission failed. Please try again.';
-                        this.showError(errorMsg);
+                        log('Submit error', status, error, xhr.responseText);${pluginSettings.sentryDsn ? `
+                        onError(new Error('Form submission failed: ' + status + ' ' + error));` : ''}
+                        this.showError('An error occurred while submitting the form. Please check your connection and try again.');
                     }
-                },
-                error: (xhr, status, error) => {
-                    this.hideLoading();
-                    try { analytics.submitError(); } catch (e) {}
-                    log('Submit error', status, error, xhr.responseText);${pluginSettings.sentryDsn ? `
-                    onError(new Error('Form submission failed: ' + status + ' ' + error));` : ''}
-                    this.showError('An error occurred while submitting the form. Please check your connection and try again.');
-                }
+                });
             });
         }
         
