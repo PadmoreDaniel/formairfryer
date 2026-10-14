@@ -2257,7 +2257,8 @@ export function generateFormJS(form: Form, childId?: string): string {
                   if ($el.hasClass('wp-form-currency-delimited')) {
                     self.formData[name] = self.normalizeCurrencyValue($el.val());
                   } else {
-                    self.formData[name] = $el.val();
+                    const rawValue = $el.val();
+                    self.formData[name] = typeof rawValue === 'string' ? rawValue.trim() : rawValue;
                   }
                 }
             });
@@ -2378,7 +2379,12 @@ export function generateFormJS(form: Form, childId?: string): string {
                 } else {
                     value = $input.val();
                 }
-                
+
+                // Treat whitespace-only input as empty
+                if (typeof value === 'string') {
+                    value = value.trim();
+                }
+
                 // Required validation
                 if (isRequired && (!value || value === '')) {
                     $field.addClass('has-error');

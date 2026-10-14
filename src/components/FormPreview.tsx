@@ -335,7 +335,7 @@ export function FormPreview() {
           return;
         }
         // For other fields, check if empty
-        if (!Array.isArray(value) && (!value || value === '')) {
+        if (!Array.isArray(value) && (!value || String(value).trim() === '')) {
           newErrors[key] = 'This field is required';
           return;
         }
