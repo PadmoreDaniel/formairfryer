@@ -171,6 +171,7 @@ export interface Step {
   // Validation
   validateOnContinue: boolean;
   scrollOnError?: boolean; // Scroll to first error on validation failure (default: true)
+  scrollOnNavigate?: boolean; // Scroll form into view when moving between steps / on submit error (default: true)
   // Auto-advance for single question steps
   autoAdvance?: boolean; // Automatically navigate to next step when question is answered
   autoAdvanceExcludeValues?: string[]; // Option values that should not auto-advance on single-question radio/select steps
@@ -404,6 +405,9 @@ export interface LayoutDefaults {
   gridGap: number;
   minHeight?: number;
   contentAlignment: ContentAlignment;
+  // Scroll behavior shared across every form in the project.
+  scrollOnError?: boolean; // Scroll to the first error on validation failure (default: true)
+  scrollOnNavigate?: boolean; // Scroll the form into view on step change / submit error (default: true)
 }
 
 // Project-level plugin/export settings. The shortcode here is the plugin's

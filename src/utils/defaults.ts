@@ -146,6 +146,8 @@ export const defaultLayoutDefaults: LayoutDefaults = {
   gridColumns: 12,
   gridGap: 16,
   contentAlignment: 'left',
+  scrollOnError: false,
+  scrollOnNavigate: false,
 };
 
 // Default Button Config
@@ -226,6 +228,8 @@ export const createStep = (index: number, layout?: LayoutDefaults): Step => {
     continueButton: { ...defaultContinueButton },
     conditionalNavigation: [],
     validateOnContinue: true,
+    scrollOnError: l.scrollOnError === true,
+    scrollOnNavigate: l.scrollOnNavigate === true,
     autoAdvanceExcludeValues: [],
   };
   if (l.minHeight !== undefined) {
@@ -441,6 +445,8 @@ export const resolveEffectiveForm = (form: Form, project?: Project | null): Form
       gridGap: d.layout.gridGap,
       contentAlignment: d.layout.contentAlignment,
       minHeight: d.layout.minHeight !== undefined ? d.layout.minHeight : step.minHeight,
+      scrollOnError: d.layout.scrollOnError === true,
+      scrollOnNavigate: d.layout.scrollOnNavigate === true,
     }));
   }
 

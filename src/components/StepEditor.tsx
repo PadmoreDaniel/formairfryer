@@ -549,7 +549,7 @@ export function StepEditor() {
             <label>
               <input
                 type="checkbox"
-                checked={step.scrollOnError !== false}
+                checked={step.scrollOnError === true}
                 onChange={(e) =>
                   dispatch({
                     type: 'UPDATE_STEP',
@@ -562,9 +562,33 @@ export function StepEditor() {
               />
               Scroll to first error on validation failure
             </label>
-            {step.scrollOnError === false && (
+            {step.scrollOnError !== true && (
               <span className="help-text" style={{ display: 'block', fontSize: '0.8em', color: '#666', marginTop: '4px' }}>
-                Automatic scrolling to errors is disabled for this step.
+                Automatic scrolling to errors is off for this step.
+              </span>
+            )}
+          </div>
+
+          <div className="nav-button-config">
+            <label>
+              <input
+                type="checkbox"
+                checked={step.scrollOnNavigate === true}
+                onChange={(e) =>
+                  dispatch({
+                    type: 'UPDATE_STEP',
+                    payload: {
+                      stepId: step.id,
+                      updates: { scrollOnNavigate: e.target.checked },
+                    },
+                  })
+                }
+              />
+              Scroll form into view on step change
+            </label>
+            {step.scrollOnNavigate !== true && (
+              <span className="help-text" style={{ display: 'block', fontSize: '0.8em', color: '#666', marginTop: '4px' }}>
+                The page will not jump when this step opens or on a submit error.
               </span>
             )}
           </div>

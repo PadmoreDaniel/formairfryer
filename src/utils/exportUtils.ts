@@ -1,6 +1,6 @@
 import { Form, FormExport, Project, ProjectExport } from '../types';
 import { generateThemeCSS, generateFormHTML, generateFormJS, getGoogleFontsUrl, getFormConfigVar } from './wpPluginGenerator';
-import { resolveEffectiveForm, generateChildId, projectPluginToFormPlugin } from './defaults';
+import { resolveEffectiveForm, generateChildId, projectPluginToFormPlugin, cloneTheme } from './defaults';
 
 // Analytics ingestion endpoint + write key are provided at build time. When
 // the endpoint is empty, analytics is effectively disabled in exports.
@@ -148,10 +148,22 @@ function resolveChildren(project: Project, forms: Form[]): ResolvedChild[] {
     // config variable, AJAX action and nonce consistent between the generated
     // PHP and JS — otherwise a child that doesn't inherit the plugin section
     // would look up a mismatched config var and load no styles/config.
+    // The theme is ALWAYS taken from the project so every child renders with
+    // the same design system and shares the single project stylesheet — this
+    // is the guarantee that forms in a project cannot drift apart visually.
+    // Scroll behavior is likewise project-wide so every form treats step
+    // changes and validation errors identically (e.g. no page jumping).
     // Build a new object so the original form is never mutated.
+    const layout = project.defaults.layout;
     const effective: Form = {
       ...resolved,
+      theme: cloneTheme(project.defaults.theme),
       pluginSettings: projectPluginToFormPlugin(project.defaults.plugin),
+      steps: resolved.steps.map((step) => ({
+        ...step,
+        scrollOnError: layout.scrollOnError === true,
+        scrollOnNavigate: layout.scrollOnNavigate === true,
+      })),
     };
     return {
       childId: candidate,
@@ -185,7 +197,16 @@ export async function downloadWordPressProjectPlugin(project: Project, forms: Fo
     includesFolder.file('class-ajax-handler.php', generateProjectAjaxHandlerClass(project));
   }
 
-  // Per-child assets, template and config.
+  // Single shared stylesheet for the whole project, generated from the project
+  // theme. Every child form loads this same file, so the design system is a
+  // single source of truth and forms cannot drift apart.
+  const sharedAssets = pluginFolder.folder('assets');
+  if (sharedAssets) {
+    sharedAssets.file('css/form-styles.css', generateThemeCSS(project.defaults.theme));
+  }
+
+  // Per-child JS, template and config. Styling is intentionally NOT per-child —
+  // all children share the root stylesheet above.
   const formsFolder = pluginFolder.folder('forms');
   if (formsFolder) {
     for (const child of children) {
@@ -194,7 +215,6 @@ export async function downloadWordPressProjectPlugin(project: Project, forms: Fo
       childFolder.file('form-config.json', exportFormAsJSON(child.form));
       const assets = childFolder.folder('assets');
       if (assets) {
-        assets.file('css/form-styles.css', generateThemeCSS(child.form.theme));
         assets.file('js/form-handler.js', generateFormJS(child.form, child.childId));
       }
       const templates = childFolder.folder('templates');
@@ -329,7 +349,9 @@ ${plugin.sentryDsn ? `            if (!wp_script_is('${plugin.pluginSlug}-sentry
         wp_enqueue_script($handle);
 
         $form_config = $this->get_form_config($child_id);
-        $css_url = $base_url . 'assets/css/form-styles.css';
+        // Every child form loads the same project-level stylesheet so the
+        // design system stays consistent across all forms in the project.
+        $css_url = ${CONST}_PLUGIN_URL . 'assets/css/form-styles.css';
 
         $localize_data = array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
@@ -350,7 +372,7 @@ ${plugin.sentryDsn ? `            if (!wp_script_is('${plugin.pluginSlug}-sentry
             'sentryDsn' => '${escapePhp(plugin.sentryDsn)}'` : ''}
         );
 
-        $css_file = ${CONST}_PLUGIN_DIR . 'forms/' . $child_id . '/assets/css/form-styles.css';
+        $css_file = ${CONST}_PLUGIN_DIR . 'assets/css/form-styles.css';
         if (file_exists($css_file)) {
             $css_content = file_get_contents($css_file);
             if ($css_content !== false && strlen($css_content) < 50000) {
@@ -659,6 +681,13 @@ ${rows}
 
 Multiple forms from this project can be placed on the same page; each is
 isolated and submits independently. An unknown or missing \`id\` renders nothing.
+
+## Styling
+
+All forms share a single stylesheet at \`assets/css/form-styles.css\`, generated
+from the project's design system. Editing this one file (or the project theme in
+the builder and re-exporting) updates every form consistently — individual forms
+cannot drift apart.
 
 ## Version
 

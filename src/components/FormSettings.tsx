@@ -214,6 +214,46 @@ export function FormSettings() {
                   </p>
                 </div>
 
+                <label className="inheritance-title">Scroll behavior (project-wide)</label>
+                <div className="form-group checkbox-group">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={currentProject.defaults.layout.scrollOnNavigate === true}
+                      onChange={(e) =>
+                        dispatch({
+                          type: 'UPDATE_PROJECT_DEFAULTS',
+                          payload: { layout: { ...currentProject.defaults.layout, scrollOnNavigate: e.target.checked } },
+                        })
+                      }
+                    />
+                    <span>Scroll form into view on step change</span>
+                  </label>
+                  <p className="field-hint">
+                    Off by default: the page never jumps as users move between
+                    steps or on a submit error. Applied to every form in the project.
+                  </p>
+                </div>
+                <div className="form-group checkbox-group">
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={currentProject.defaults.layout.scrollOnError === true}
+                      onChange={(e) =>
+                        dispatch({
+                          type: 'UPDATE_PROJECT_DEFAULTS',
+                          payload: { layout: { ...currentProject.defaults.layout, scrollOnError: e.target.checked } },
+                        })
+                      }
+                    />
+                    <span>Scroll to the first error on validation failure</span>
+                  </label>
+                  <p className="field-hint">
+                    Off by default. Applies to every form in the project when
+                    exported as a project plugin.
+                  </p>
+                </div>
+
                 <label className="inheritance-title">Inherit from project</label>
                 {inheritanceSections.map((section) => (
                   <div className="form-group checkbox-group" key={section.key}>

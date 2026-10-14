@@ -2582,8 +2582,9 @@ export function generateFormJS(form: Form, childId?: string): string {
             
             log('After validation loop, isValid =', isValid);
             
-            // Scroll to first error - only if scrollOnError is not explicitly disabled
-            const scrollOnError = stepConfig ? (stepConfig.scrollOnError !== false) : true; // Default to true if not specified
+            // Scroll to first error only when the step explicitly opts in.
+            // Missing/undefined config means no scrolling (no page jumping).
+            const scrollOnError = stepConfig ? (stepConfig.scrollOnError === true) : false;
             
             if (!isValid && scrollOnError) {
                 log('Validation FAILED - scrolling to error');
@@ -2951,13 +2952,18 @@ export function generateFormJS(form: Form, childId?: string): string {
                 analytics.enterStep(toCfg.id || '', self.currentStep);
             } catch (e) {}
             
-            // Only scroll if the form is out of view (above viewport)
-            const formTop = self.container.offset().top;
-            const viewportTop = $(window).scrollTop();
-            if (formTop < viewportTop) {
-                $('html, body').animate({
-                    scrollTop: formTop - 50
-                }, 300);
+            // Only scroll if the step explicitly opts in to scroll-on-navigate
+            // AND the form is out of view (above viewport). Undefined means no
+            // scrolling, so forms never jump unless the setting is enabled.
+            var navCfg = stepsConfig[self.currentStep] || {};
+            if (navCfg.scrollOnNavigate === true) {
+                const formTop = self.container.offset().top;
+                const viewportTop = $(window).scrollTop();
+                if (formTop < viewportTop) {
+                    $('html, body').animate({
+                        scrollTop: formTop - 50
+                    }, 300);
+                }
             }
         }
         
@@ -3294,9 +3300,11 @@ export function generateFormJS(form: Form, childId?: string): string {
             }
             $error.text(message).show();
             
-            // Scroll to form container (host element is in light DOM)
+            // Scroll to form container (host element is in light DOM) only when
+            // the current step explicitly opts in to scroll-on-navigate.
+            var curCfg = stepsConfig[this.currentStep] || {};
             const scrollTarget = this.hostElement || this.container[0];
-            if (scrollTarget) {
+            if (scrollTarget && curCfg.scrollOnNavigate === true) {
                 $('html, body').animate({
                     scrollTop: $(scrollTarget).offset().top - 50
                 }, 300);
